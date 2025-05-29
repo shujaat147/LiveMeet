@@ -1,121 +1,132 @@
-import React, { useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Image,
-  TouchableOpacity,
-  ImageBackground,
-} from 'react-native';
-import RtcEngine from 'react-native-agora';
-import { useRoute } from '@react-navigation/native';
-import { Ionicons, MaterialIcons, Feather } from '@expo/vector-icons';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import RtcEngine, { RtcLocalView, RtcRemoteView, VideoRenderMode, ClientRole } from 'react-native-agora';
+import { Ionicons } from '@expo/vector-icons';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import colors from '../constants/colors';
+import { logCallMessage } from '../utils/actions/chatActions';
+import { ImageBackground } from 'react-native';
+import backgroundImage from '../assets/call-background.jpeg';
+import defaultAvatar from '../assets/images/userImage-1.png';
 
-const appId = 'dd875cded7644ace82ed3cb3f4ed818a';
-const uid = Math.floor(Math.random() * 10000);
 
-const VoiceCallScreen = ({ navigation }) => {
-  const route = useRoute();
-  const { channelName, incoming, callerName, callerImage } = route.params;
 
-  const [engine, setEngine] = useState(null);
+const APP_ID = "3baa3524be2c48d08ea9380ae162e499";
+const TEMP_TOKEN = "007eJxTYDj2dHeS8Y9VKSdDDrJqX8ybteGd7Jx9zCHejFb+/5/wGF5TYDBOSkw0NjUySUo1SjaxSDGwSE20NLYwSEw1NDNKNbG0nNJjntEQyMhw1yCZmZEBAkF8boaS1OKS5MScHEMjYwYGAHWKIfQ=";
+
+const VoiceCallScreen = () => {
   const [joined, setJoined] = useState(false);
-  const [callAccepted, setCallAccepted] = useState(!incoming);
-  const [muted, setMuted] = useState(false);
-  const [speaker, setSpeaker] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isSpeakerOn, setIsSpeakerOn] = useState(false);
+  const [callTime, setCallTime] = useState(0);
+  const [remoteUserId, setRemoteUserId] = useState(null);
+  const timerRef = useRef(null);
+
+  const engineRef = useRef(null);
+  const navigation = useNavigation();
+  const route = useRoute();
+
+  const { chatId, receiverData, callerData, isCaller } = route.params;
 
   useEffect(() => {
-    let rtcEngine;
-
     const init = async () => {
-      rtcEngine = await RtcEngine.create(appId);
-      await rtcEngine.enableAudio();
+      const engine = await RtcEngine.create(APP_ID);
+      engineRef.current = engine;
 
-      rtcEngine.addListener('UserJoined', (uid, elapsed) => {
+      await engine.enableAudio();
+
+      engine.addListener('UserJoined', (uid) => {
         console.log('Remote user joined:', uid);
+        setRemoteUserId(uid);
+        startTimer();
       });
 
-      rtcEngine.addListener('UserOffline', (uid, reason) => {
-        console.log('User offline:', uid, 'Reason:', reason);
+      engine.addListener('UserOffline', () => {
+        console.log('Remote user left');
+        stopTimer();
+        endCall();
       });
 
-      rtcEngine.addListener('JoinChannelSuccess', (channel, uid, elapsed) => {
-        console.log(`Joined channel: ${channel} with uid: ${uid}`);
+      engine.addListener('JoinChannelSuccess', () => {
+        console.log('Joined channel successfully');
         setJoined(true);
       });
 
-      setEngine(rtcEngine);
-
-      if (!incoming) {
-        await rtcEngine.joinChannel(null, channelName, null, uid);
-      }
+      await engine.joinChannel(TEMP_TOKEN, chatId, null, 0);
     };
 
     init();
 
     return () => {
-      const cleanup = async () => {
-        if (rtcEngine) {
-          await rtcEngine.leaveChannel();
-          rtcEngine.removeAllListeners();
-          rtcEngine.destroy();
-        }
-      };
-      cleanup();
+      engineRef.current?.leaveChannel();
+      engineRef.current?.destroy();
+      stopTimer();
     };
-  }, [channelName, incoming]);
+  }, []);
 
-  const handleAccept = async () => {
-    if (engine) {
-      await engine.joinChannel(null, channelName, null, uid);
-      setCallAccepted(true);
-    }
+  const startTimer = () => {
+    timerRef.current = setInterval(() => {
+      setCallTime((prev) => prev + 1);
+    }, 1000);
   };
 
-  const handleReject = () => {
+  const stopTimer = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+  };
+
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  };
+
+  const endCall = async () => {
+    stopTimer();
+
+    // ✅ Add this line:
+    await logCallMessage(chatId, isCaller ? callerData.userId : receiverData.userId, "Voice call ended", "ended");
+
     navigation.goBack();
   };
 
+
   const toggleMute = () => {
-    if (engine) {
-      engine.muteLocalAudioStream(!muted);
-      setMuted(!muted);
-    }
+    const newMute = !isMuted;
+    setIsMuted(newMute);
+    engineRef.current?.muteLocalAudioStream(newMute);
   };
 
   const toggleSpeaker = () => {
-    if (engine) {
-      engine.setEnableSpeakerphone(!speaker);
-      setSpeaker(!speaker);
-    }
+    const newSpeaker = !isSpeakerOn;
+    setIsSpeakerOn(newSpeaker);
+    engineRef.current?.setEnableSpeakerphone(newSpeaker);
   };
 
-  return (
-    <ImageBackground
-      source={require('../assets/call-background.jpeg')} // use any dark patterned background
-      style={styles.container}
-      resizeMode="cover"
-    >
-      <View style={styles.header}>
-        <Text style={styles.name}>{callerName || 'Calling...'}</Text>
-        {joined && <Text style={styles.status}>00:04</Text>}
-        {!joined && <Text style={styles.status}>Connecting...</Text>}
-      </View>
+  const userInfo = isCaller ? receiverData : callerData;
 
+  return (
+
+    <ImageBackground source={backgroundImage} style={styles.container}>
       <Image
-        source={{ uri: callerImage }}
+        source={userInfo.profilePicture ? { uri: userInfo.profilePicture } : defaultAvatar}
         style={styles.avatar}
       />
+      <Text style={styles.name}>{userInfo.firstName} {userInfo.lastName}</Text>
+      <Text style={styles.status}>
+        {remoteUserId ? formatTime(callTime) : isCaller ? 'Calling...' : 'Ringing...'}
+      </Text>
 
       <View style={styles.controls}>
-        <TouchableOpacity onPress={toggleMute} style={styles.iconButton}>
-          <Feather name={muted ? 'mic-off' : 'mic'} size={24} color="white" />
+        <TouchableOpacity onPress={toggleMute}>
+          <Ionicons name={isMuted ? 'mic-off' : 'mic'} size={32} color={colors.grey} padding={12} />
         </TouchableOpacity>
-        <TouchableOpacity onPress={toggleSpeaker} style={styles.iconButton}>
-          <Ionicons name={speaker ? 'volume-high' : 'volume-mute'} size={26} color="white" />
+
+        <TouchableOpacity onPress={endCall} style={styles.endCallButton}>
+          <Ionicons name="call" size={32} color={colors.nearlyWhite} />
         </TouchableOpacity>
-        <TouchableOpacity onPress={handleReject} style={[styles.iconButton, styles.endButton]}>
-          <MaterialIcons name="call-end" size={26} color="white" />
+
+        <TouchableOpacity onPress={toggleSpeaker}>
+          <Ionicons name={isSpeakerOn ? 'volume-high' : 'volume-mute'} size={32} color={colors.grey} padding={12} />
         </TouchableOpacity>
       </View>
     </ImageBackground>
@@ -126,46 +137,36 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 80,
-    backgroundColor: '#1e1e1e'
+    justifyContent: 'center',
+    resizeMode: 'cover', // optional
   },
-  header: {
-    alignItems: 'center',
-    marginTop: 40,
+  avatar: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    marginBottom: 20,
   },
   name: {
-    fontSize: 22,
-    color: 'white',
+    fontSize: 24,
+    color: 'black',
     fontWeight: 'bold',
   },
   status: {
+    fontSize: 18,
+    color: 'red',
     marginTop: 8,
-    fontSize: 16,
-    color: '#ccc',
-  },
-  avatar: {
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    marginVertical: 20,
-    borderWidth: 4,
-    borderColor: 'white'
+    marginBottom: 40,
   },
   controls: {
     flexDirection: 'row',
-    marginBottom: 40,
-    alignItems: 'center',
-    justifyContent: 'space-between',
     width: '70%',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
   },
-  iconButton: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 40,
-    padding: 15,
-  },
-  endButton: {
+  endCallButton: {
     backgroundColor: 'red',
+    padding: 12,
+    borderRadius: 50,
   },
 });
 

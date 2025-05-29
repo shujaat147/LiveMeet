@@ -24,7 +24,9 @@
       }
     },
     "android": {
-      "permissions": ["RECORD_AUDIO"],
+      "permissions": [
+        "RECORD_AUDIO"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FFFFFF"
@@ -49,7 +51,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "623c4e8f-85e5-43ce-a510-e878fece537a"
+        "projectId": "c3c67066-fe48-4c66-afdf-aad5b85b328a"
       }
     }
   }

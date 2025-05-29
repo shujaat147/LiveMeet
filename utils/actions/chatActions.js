@@ -170,6 +170,30 @@ export const addUsersToChat = async (userLoggedInData, usersToAddData, chatData)
 
 }
 
+export const logCallMessage = async (chatId, senderId, statusText, status) => {
+    const app = getFirebaseApp();
+    const dbRef = ref(getDatabase(app));
+    const messagesRef = child(dbRef, `messages/${chatId}`);
+
+    const messageData = {
+        type: "call_log",
+        status,
+        sentBy: senderId,
+        sentAt: new Date().toISOString(),
+        text: statusText
+    };
+
+    await push(messagesRef, messageData);
+
+    const chatRef = child(dbRef, `chats/${chatId}`);
+    await update(chatRef, {
+        updatedBy: senderId,
+        updatedAt: new Date().toISOString(),
+        latestMessageText: statusText
+    });
+};
+
+
 const sendPushNotificationForUsers = (chatUsers, title, body, chatId) => {
     chatUsers.forEach(async uid => {
         console.log("test");

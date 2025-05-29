@@ -23,6 +23,8 @@ import ContactScreen from "../screens/ContactScreen";
 import DataListScreen from "../screens/DataListScreen";
 import VoiceCallScreen from "../screens/VoiceCallScreen";
 import { StackActions, useNavigation } from '@react-navigation/native';
+import IncomingCallScreen from '../screens/IncomingCallScreen';
+
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -31,7 +33,7 @@ const TabNavigator = () => {
   return (
     <Tab.Navigator screenOptions={{
       headerTitle: "",
-      headerShadowVisible: false  
+      headerShadowVisible: false
     }}>
       <Tab.Screen
         name="ChatList"
@@ -105,6 +107,14 @@ const StackNavigator = () => {
           options={{
             headerTitle: "Voice Call",
             headerBackTitle: "Back",
+          }}
+        />
+        <Stack.Screen
+          name="IncomingCall"
+          component={IncomingCallScreen}
+          options={{
+            headerShown: false,
+            presentation: 'fullScreenModal'
           }}
         />
       </Stack.Group>
@@ -182,7 +192,7 @@ const MainNavigator = (props) => {
 
         onValue(chatRef, (chatSnapshot) => {
           chatsFoundCount++;
-          
+
           const data = chatSnapshot.val();
 
           if (data) {
@@ -199,10 +209,10 @@ const MainNavigator = (props) => {
               const userRef = child(dbRef, `users/${userId}`);
 
               get(userRef)
-              .then(userSnapshot => {
-                const userSnapshotData = userSnapshot.val();
-                dispatch(setStoredUsers({ newUsers: { userSnapshotData } }))
-              })
+                .then(userSnapshot => {
+                  const userSnapshotData = userSnapshot.val();
+                  dispatch(setStoredUsers({ newUsers: { userSnapshotData } }))
+                })
 
               refs.push(userRef);
             })
@@ -236,7 +246,31 @@ const MainNavigator = (props) => {
     onValue(userStarredMessagesRef, querySnapshot => {
       const starredMessages = querySnapshot.val() ?? {};
       dispatch(setStarredMessages({ starredMessages }));
-    })
+    });
+
+    const callRef = ref(getDatabase(app), "calls");
+    onValue(callRef, snapshot => {
+      const callsData = snapshot.val();
+      if (!callsData) return;
+
+      const incomingCall = Object.values(callsData).find(call =>
+        call.receiverId === userData.userId &&
+        call.status === "calling"
+      );
+
+      if (incomingCall) {
+        const { chatId, callerId } = incomingCall;
+        const caller = storedUsers[callerId];
+
+        if (caller) {
+          navigation.navigate("IncomingCall", {
+            callId: `call_${chatId}`,
+            chatId,
+            callerData: caller
+          });
+        }
+      }
+    });
 
     return () => {
       console.log("Unsubscribing firebase listeners");
@@ -253,8 +287,8 @@ const MainNavigator = (props) => {
 
   return (
     <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={ Platform.OS === "ios" ? "padding" : undefined}>
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <StackNavigator />
     </KeyboardAvoidingView>
   );

@@ -26,6 +26,8 @@ import AwesomeAlert from "react-native-awesome-alerts";
 import CustomHeaderButton from "../components/CustomHeaderButton";
 import { createChat, sendImage, sendTextMessage } from "../utils/actions/chatActions";
 import { launchImagePicker, openCamera, uploadImageAsync } from "../utils/imagePickerHelper";
+import { initiateCall } from "../utils/actions/callActions";
+
 
 const ChatScreen = (props) => {
   const [chatUsers, setChatUsers] = useState([]);
@@ -69,31 +71,43 @@ const ChatScreen = (props) => {
       headerTitle: chatData.chatName ?? getChatTitleFromName(),
       headerRight: () => (
         <HeaderButtons HeaderButtonComponent={CustomHeaderButton}>
-              {chatId && (
-                <>
-                  <Item
-                    title="Voice Call"
-                    iconName="call-outline"
-                    onPress={() =>
-                      props.navigation.navigate("VoiceCall", {
-                        channelName: `call_${chatId}`, // ✅ Unique channel name
-                      })
-                    }
-                  />
-                  <Item
-                    title="Chat settings"
-                    iconName="settings-outline"
-                    onPress={() =>
-                      chatData.isGroupChat
-                        ? props.navigation.navigate("ChatSettings", { chatId })
-                        : props.navigation.navigate("Contact", {
-                            uid: chatUsers.find(uid => uid !== userData.userId),
-                          })
-                    }
-                  />
-                </>
-              )}
-            </HeaderButtons>
+          {chatId && (
+            <>
+              <Item
+                title="Voice Call"
+                iconName="call-outline"
+                onPress={async () => {
+                  const otherUserId = chatUsers.find(uid => uid !== userData.userId);
+                  const otherUserData = storedUsers[otherUserId];
+
+                  await initiateCall({
+                    chatId,
+                    callerId: userData.userId,
+                    receiverId: otherUserId
+                  });
+
+                  props.navigation.navigate("VoiceCall", {
+                    chatId,
+                    callerData: userData,
+                    receiverData: otherUserData,
+                    isCaller: true
+                  });
+                }}
+              />
+              <Item
+                title="Chat settings"
+                iconName="settings-outline"
+                onPress={() =>
+                  chatData.isGroupChat
+                    ? props.navigation.navigate("ChatSettings", { chatId })
+                    : props.navigation.navigate("Contact", {
+                      uid: chatUsers.find(uid => uid !== userData.userId),
+                    })
+                }
+              />
+            </>
+          )}
+        </HeaderButtons>
       ),
     });
 
@@ -191,7 +205,9 @@ const ChatScreen = (props) => {
                   const isOwnMessage = message.sentBy === userData.userId;
 
                   let messageType = isOwnMessage ? "myMessage" : "theirMessage";
-                  if (message.type === "info") messageType = "info";
+                  if (message.type === "info" || message.type === "call_log") {
+                    messageType = "info";
+                  }
 
                   const sender = message.sentBy && storedUsers[message.sentBy];
                   const name = sender && `${sender.firstName} ${sender.lastName}`;
