@@ -8,6 +8,8 @@ import { Feather, FontAwesome } from '@expo/vector-icons';
 import { starMessage } from '../utils/actions/chatActions';
 import { useDispatch, useSelector } from 'react-redux';
 import { hideMessage } from '../store/messagesSlice';
+import { Audio } from 'expo-av';
+
 
 function formatAmPm(dateString) {
     const date = new Date(dateString);
@@ -37,7 +39,7 @@ const Bubble = props => {
     const { text, type, messageId, chatId, userId, date, setReply, replyingTo, name, imageUrl } = props;
 
     const dispatch = useDispatch();
-    const starredMessages = useSelector(state => state.messages.starredMessages[chatId] ?? {});
+    const starredMessages = useSelector(state => state.messages.starredMessages[chatId]) || {};
     const storedUsers = useSelector(state => state.users.storedUsers);
 
     const bubbleStyle = { ...styles.container };
@@ -103,6 +105,16 @@ const Bubble = props => {
         dispatch(hideMessage({ chatId, messageId }));
     };
 
+    const playSound = async (uri) => {
+        try {
+            const { sound } = await Audio.Sound.createAsync({ uri });
+            await sound.playAsync();
+        } catch (error) {
+            console.log('Error playing sound:', error);
+        }
+    };
+
+
     return (
         <View style={wrapperStyle}>
             <Container onLongPress={() => menuRef.current?.props?.ctx?.menuActions?.openMenu(id.current)} style={{ width: '100%' }}>
@@ -120,11 +132,21 @@ const Bubble = props => {
                         />
                     }
 
-                    {!imageUrl &&
+                    {!imageUrl && props.audioUrl &&
+                        <TouchableWithoutFeedback onPress={() => playSound(props.audioUrl)}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginVertical: 5 }}>
+                                <FontAwesome name="play-circle" size={24} color={colors.red} />
+                                <Text style={textStyle}>Voice Message</Text>
+                            </View>
+                        </TouchableWithoutFeedback>
+                    }
+
+                    {!imageUrl && !props.audioUrl &&
                         <Text style={textStyle}>
                             {text}
                         </Text>
                     }
+
 
                     {imageUrl &&
                         <Image source={{ uri: imageUrl }} style={styles.image} />

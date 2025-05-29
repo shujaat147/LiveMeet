@@ -27,6 +27,10 @@ import CustomHeaderButton from "../components/CustomHeaderButton";
 import { createChat, sendImage, sendTextMessage } from "../utils/actions/chatActions";
 import { launchImagePicker, openCamera, uploadImageAsync } from "../utils/imagePickerHelper";
 import { initiateCall } from "../utils/actions/callActions";
+import { FontAwesome } from "@expo/vector-icons";
+import { Audio } from "expo-av";
+import { startRecording, stopRecordingAndUpload } from "../utils/audioHelper"; // You’ll create this file
+import { getDatabase, ref, push, set } from "firebase/database";
 
 
 const ChatScreen = (props) => {
@@ -38,6 +42,8 @@ const ChatScreen = (props) => {
   const [tempImageUri, setTempImageUri] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+
 
   const flatList = useRef();
 
@@ -137,6 +143,36 @@ const ChatScreen = (props) => {
     }
   }, [messageText, chatId, isSending]);
 
+  const handleVoiceRecording = async () => {
+    if (!isRecording) {
+      await startRecording();
+      setIsRecording(true);
+    } else {
+      const audioUrl = await stopRecordingAndUpload(chatId);
+      setIsRecording(false);
+
+      if (audioUrl) {
+        let id = chatId;
+        if (!id) {
+          id = await createChat(userData.userId, props.route.params.newChatData);
+          setChatId(id);
+        }
+
+        const voiceMessage = {
+          type: "audio",
+          audioUrl,
+          timestamp: Date.now(),
+          sentBy: userData.userId,
+        };
+
+        const db = getDatabase();
+        const messagesRef = ref(db, `messages/${id}`);
+        const newMessageRef = push(messagesRef);
+        await set(newMessageRef, voiceMessage);
+      }
+    }
+  };
+
   const pickImage = useCallback(async () => {
     try {
       const tempUri = await launchImagePicker();
@@ -216,6 +252,7 @@ const ChatScreen = (props) => {
                     <Bubble
                       type={messageType}
                       text={message.text}
+                      audioUrl={message.audioUrl}
                       messageId={message.key}
                       userId={userData.userId}
                       chatId={chatId}
@@ -262,6 +299,11 @@ const ChatScreen = (props) => {
               <Feather name="send" size={20} color="white" />
             </TouchableOpacity>
           )}
+
+          <TouchableOpacity style={styles.mediaButton} onPress={handleVoiceRecording}>
+            <FontAwesome name={isRecording ? "stop" : "microphone"} size={24} color={colors.red} />
+          </TouchableOpacity>
+
 
           <AwesomeAlert
             show={tempImageUri !== ""}

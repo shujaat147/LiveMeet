@@ -47,7 +47,8 @@
             "./assets/notification_sound_other.mp3"
           ]
         }
-      ]
+      ],
+      "expo-font"
     ],
     "extra": {
       "eas": {
