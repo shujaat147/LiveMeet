@@ -44,7 +44,8 @@ const ChatScreen = (props) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const recordingIntervalRef = useRef(null);
 
   const flatList = useRef();
 
@@ -146,9 +147,18 @@ const ChatScreen = (props) => {
     if (!isRecording) {
       await startRecording();
       setIsRecording(true);
+
+      // Start timer
+      setRecordingDuration(0);
+      recordingIntervalRef.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000);
     } else {
       const audioUrl = await stopRecordingAndUpload(chatId);
       setIsRecording(false);
+
+      clearInterval(recordingIntervalRef.current);
+      setRecordingDuration(0);
 
       if (audioUrl) {
         let id = chatId;
@@ -299,10 +309,16 @@ const ChatScreen = (props) => {
             </TouchableOpacity>
           )}
 
-          <TouchableOpacity style={styles.mediaButton} onPress={handleVoiceRecording}>
-            <FontAwesome name={isRecording ? "stop" : "microphone"} size={24} color={colors.red} />
-          </TouchableOpacity>
-
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <TouchableOpacity style={styles.mediaButton} onPress={handleVoiceRecording}>
+              <FontAwesome name={isRecording ? "stop" : "microphone"} size={24} color={colors.red} />
+            </TouchableOpacity>
+            {isRecording && (
+              <Text style={{ marginLeft: 6, color: colors.red }}>
+                {recordingDuration}s
+              </Text>
+            )}
+          </View>
 
           <AwesomeAlert
             show={tempImageUri !== ""}

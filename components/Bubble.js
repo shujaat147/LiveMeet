@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { Image, StyleSheet, Text, TouchableWithoutFeedback, View } from 'react-native';
 import colors from '../constants/colors';
 import { Menu, MenuTrigger, MenuOptions, MenuOption } from 'react-native-popup-menu';
@@ -10,19 +10,16 @@ import { useDispatch, useSelector } from 'react-redux';
 import { hideMessage } from '../store/messagesSlice';
 import { Audio } from 'expo-av';
 
-
 function formatAmPm(dateString) {
     const date = new Date(dateString);
     let hours = date.getHours();
     let minutes = date.getMinutes();
     const ampm = hours >= 12 ? 'pm' : 'am';
-    hours = hours % 12;
-    hours = hours ? hours : 12;
+    hours = hours % 12 || 12;
     minutes = minutes < 10 ? '0' + minutes : minutes;
     return hours + ':' + minutes + ' ' + ampm;
 }
 
-// ✅ FIXED: pass text="" in MenuOption to prevent crash
 const MenuItem = props => {
     const Icon = props.iconPack ?? Feather;
     return (
@@ -36,11 +33,62 @@ const MenuItem = props => {
 };
 
 const Bubble = props => {
-    const { text, type, messageId, chatId, userId, date, setReply, replyingTo, name, imageUrl } = props;
+    const { text, type, messageId, chatId, userId, date, setReply, replyingTo, name, imageUrl, audioUrl, onImagePress } = props;
 
     const dispatch = useDispatch();
     const starredMessages = useSelector(state => state.messages.starredMessages[chatId]) || {};
     const storedUsers = useSelector(state => state.users.storedUsers);
+
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [playbackProgress, setPlaybackProgress] = useState(0);
+    const playbackRef = useRef(null);
+
+    useEffect(() => {
+        return () => {
+            if (playbackRef.current) {
+                playbackRef.current.unloadAsync();
+            }
+        };
+    }, []);
+
+    const playSound = async (uri) => {
+        try {
+            setIsPlaying(true);
+            const { sound } = await Audio.Sound.createAsync(
+                { uri },
+                { shouldPlay: true },
+                onPlaybackStatusUpdate
+            );
+            playbackRef.current = sound;
+            await sound.playAsync();
+        } catch (error) {
+            console.log("Error playing sound:", error);
+        }
+    };
+
+    const onPlaybackStatusUpdate = status => {
+        if (status.isLoaded) {
+            if (status.didJustFinish) {
+                setIsPlaying(false);
+                setPlaybackProgress(0);
+                playbackRef.current?.unloadAsync();
+            } else {
+                setPlaybackProgress(Math.floor(status.positionMillis / 1000));
+            }
+        }
+    };
+
+    const copyToClipboard = async text => {
+        try {
+            await Clipboard.setStringAsync(text);
+        } catch (error) {
+            console.log(error);
+        }
+    };
+
+    const handleDeleteForMe = () => {
+        dispatch(hideMessage({ chatId, messageId }));
+    };
 
     const bubbleStyle = { ...styles.container };
     const textStyle = { ...styles.text };
@@ -90,71 +138,58 @@ const Bubble = props => {
             break;
     }
 
-    const copyToClipboard = async text => {
-        try {
-            await Clipboard.setStringAsync(text);
-        } catch (error) {
-            console.log(error);
-        }
-    };
-
     const isStarred = isUserMessage && starredMessages[messageId] !== undefined;
     const replyingToUser = replyingTo && storedUsers[replyingTo.sentBy];
-
-    const handleDeleteForMe = () => {
-        dispatch(hideMessage({ chatId, messageId }));
-    };
-
-    const playSound = async (uri) => {
-        try {
-            const { sound } = await Audio.Sound.createAsync({ uri });
-            await sound.playAsync();
-        } catch (error) {
-            console.log('Error playing sound:', error);
-        }
-    };
-
 
     return (
         <View style={wrapperStyle}>
             <Container onLongPress={() => menuRef.current?.props?.ctx?.menuActions?.openMenu(id.current)} style={{ width: '100%' }}>
                 <View style={bubbleStyle}>
-
-                    {name && type !== "info" &&
+                    {name && type !== "info" && (
                         <Text style={styles.name}>{name}</Text>
-                    }
+                    )}
 
-                    {replyingToUser &&
+                    {replyingToUser && (
                         <Bubble
                             type='reply'
                             text={replyingTo.text}
                             name={`${replyingToUser.firstName} ${replyingToUser.lastName}`}
                         />
-                    }
+                    )}
 
-                    {!imageUrl && props.audioUrl &&
-                        <TouchableWithoutFeedback onPress={() => playSound(props.audioUrl)}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginVertical: 5 }}>
-                                <FontAwesome name="play-circle" size={24} color={colors.red} />
-                                <Text style={textStyle}>Voice Message</Text>
+                    {audioUrl && !imageUrl && (
+                        <TouchableWithoutFeedback onPress={() => {
+                            if (!isPlaying) {
+                                playSound(audioUrl);
+                            }
+                        }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 5 }}>
+                                <FontAwesome
+                                    name={isPlaying ? "pause-circle" : "play-circle"}
+                                    size={28}
+                                    color={colors.red}
+                                />
+                                <Text style={{ marginLeft: 10 }}>{isPlaying ? `${playbackProgress}s` : "Voice Message"}</Text>
                             </View>
                         </TouchableWithoutFeedback>
-                    }
-
-                    {!imageUrl && !props.audioUrl &&
-                        <Text style={textStyle}>
-                            {text}
-                        </Text>
-                    }
+                    )}
 
 
-                    {imageUrl &&
-                        <Image source={{ uri: imageUrl }} style={styles.image} />
-                    }
+                    {!audioUrl && !imageUrl && (
+                        <Text style={textStyle}>{text}</Text>
+                    )}
+
+                    {imageUrl && (
+                        <TouchableWithoutFeedback onPress={() => onImagePress?.(imageUrl)}>
+                            <Image source={{ uri: imageUrl }} style={styles.image} />
+                        </TouchableWithoutFeedback>
+                    )}
 
                     {dateString && type !== "info" && (
                         <View style={styles.timeContainer}>
-                            {isStarred && <FontAwesome name='star' size={14} color={colors.textColor} style={{ marginRight: 5 }} />}
+                            {isStarred && (
+                                <FontAwesome name='star' size={14} color={colors.textColor} style={{ marginRight: 5 }} />
+                            )}
                             <Text style={styles.time}>{dateString}</Text>
                         </View>
                     )}
@@ -168,7 +203,6 @@ const Bubble = props => {
                             <MenuItem text="Delete for me" icon="trash" onSelect={handleDeleteForMe} />
                         </MenuOptions>
                     </Menu>
-
                 </View>
             </Container>
         </View>

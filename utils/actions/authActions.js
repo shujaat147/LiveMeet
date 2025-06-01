@@ -101,15 +101,21 @@ export const userLogout = (userData) => {
 }
 
 export const updateSignedInUserData = async (userId, newData) => {
-    if (newData.firstName && newData.lastName) {
-        const firstLast = `${newData.firstName} ${newData.lastName}`.toLowerCase();
-        newData.firstLast = firstLast;
-    }
+  if (newData.firstName && newData.lastName) {
+    const firstLast = `${newData.firstName} ${newData.lastName}`.toLowerCase();
+    newData.firstLast = firstLast;
+  }
 
-    const dbRef = ref(getDatabase());
-    const childRef = child(dbRef, `users/${userId}`);
-    await update(childRef, newData);
-}
+  // Ensure null is stored instead of deleted
+  const dataToUpdate = { ...newData };
+  if (!('preferredLanguage' in dataToUpdate)) {
+    dataToUpdate.preferredLanguage = null;
+  }
+
+  const dbRef = ref(getDatabase());
+  const childRef = child(dbRef, `users/${userId}`);
+  await update(childRef, dataToUpdate);
+};
 
 const createUser = async (firstName, lastName, email, userId) => {
     const firstLast = `${firstName} ${lastName}`.toLowerCase();
