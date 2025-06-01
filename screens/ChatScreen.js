@@ -31,6 +31,7 @@ import { FontAwesome } from "@expo/vector-icons";
 import { Audio } from "expo-av";
 import { startRecording, stopRecordingAndUpload } from "../utils/audioHelper"; // You’ll create this file
 import { getDatabase, ref, push, set } from "firebase/database";
+import { useMemo } from "react";
 
 
 const ChatScreen = (props) => {
@@ -51,16 +52,14 @@ const ChatScreen = (props) => {
   const storedUsers = useSelector(state => state.users.storedUsers);
   const storedChats = useSelector(state => state.chats.chatsData);
 
-  const chatMessages = useSelector(state => {
-    if (!chatId) return [];
-    const chatMessagesData = state.messages.messagesData[chatId];
-    if (!chatMessagesData) return [];
+  const chatMessagesRaw = useSelector(state => state.messages.messagesData[chatId] || {});
 
-    return Object.keys(chatMessagesData).map(key => ({
+  const chatMessages = useMemo(() => {
+    return Object.keys(chatMessagesRaw).map(key => ({
       key,
-      ...chatMessagesData[key]
+      ...chatMessagesRaw[key],
     }));
-  });
+  }, [chatMessagesRaw]);
 
   const chatData = (chatId && storedChats[chatId]) || props.route?.params?.newChatData || {};
 
