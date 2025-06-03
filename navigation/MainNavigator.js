@@ -12,19 +12,18 @@ import NewChatScreen from "../screens/NewChatScreen";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useDispatch, useSelector } from "react-redux";
 import { getFirebaseApp } from "../utils/firebaseHelper";
-import { child, get, getDatabase, off, onValue, ref } from "firebase/database";
+import { child, get, getDatabase, off, onValue, ref, onChildRemoved } from "firebase/database";
 import { setChatsData } from "../store/chatSlice";
 import { ActivityIndicator, KeyboardAvoidingView, Platform, View } from "react-native";
 import colors from "../constants/colors";
 import commonStyles from "../constants/commonStyles";
 import { setStoredUsers } from "../store/userSlice";
-import { setChatMessages, setStarredMessages } from "../store/messagesSlice";
+import { setChatMessages, setStarredMessages, removeMessage } from "../store/messagesSlice";
 import ContactScreen from "../screens/ContactScreen";
 import DataListScreen from "../screens/DataListScreen";
 import VoiceCallScreen from "../screens/VoiceCallScreen";
 import { StackActions, useNavigation } from '@react-navigation/native';
 import IncomingCallScreen from '../screens/IncomingCallScreen';
-
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -140,16 +139,13 @@ const MainNavigator = (props) => {
   const storedUsers = useSelector(state => state.users.storedUsers);
 
   const [expoPushToken, setExpoPushToken] = useState('');
-  // console.log(expoPushToken)
   const notificationListener = useRef();
   const responseListener = useRef();
 
   useEffect(() => {
     registerForPushNotificationsAsync().then(token => setExpoPushToken(token));
 
-    notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
-      // Handle received notification
-    });
+    notificationListener.current = Notifications.addNotificationReceivedListener(notification => {});
 
     responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
       const { data } = response.notification.request.content;
@@ -158,8 +154,7 @@ const MainNavigator = (props) => {
       if (chatId) {
         const pushAction = StackActions.push("ChatScreen", { chatId });
         navigation.dispatch(pushAction);
-      }
-      else {
+      } else {
         console.log("No chat id sent with notification");
       }
     });
@@ -196,10 +191,7 @@ const MainNavigator = (props) => {
           const data = chatSnapshot.val();
 
           if (data) {
-
-            if (!data.users.includes(userData.userId)) {
-              return;
-            }
+            if (!data.users.includes(userData.userId)) return;
 
             data.key = chatSnapshot.key;
 
@@ -207,13 +199,10 @@ const MainNavigator = (props) => {
               if (storedUsers[userId]) return;
 
               const userRef = child(dbRef, `users/${userId}`);
-
-              get(userRef)
-                .then(userSnapshot => {
-                  const userSnapshotData = userSnapshot.val();
-                  dispatch(setStoredUsers({ newUsers: { userSnapshotData } }))
-                })
-
+              get(userRef).then(userSnapshot => {
+                const userSnapshotData = userSnapshot.val();
+                dispatch(setStoredUsers({ newUsers: { userSnapshotData } }))
+              })
               refs.push(userRef);
             })
 
@@ -232,14 +221,18 @@ const MainNavigator = (props) => {
         onValue(messagesRef, messagesSnapshot => {
           const messagesData = messagesSnapshot.val();
           dispatch(setChatMessages({ chatId, messagesData }));
-        })
+        });
+
+        onChildRemoved(messagesRef, snapshot => {
+          const messageId = snapshot.key;
+          dispatch(removeMessage({ chatId, messageId }));
+        });
 
         if (chatsFoundCount == 0) {
           setIsLoading(false);
         }
       }
-
-    })
+    });
 
     const userStarredMessagesRef = child(dbRef, `userStarredMessages/${userData.userId}`);
     refs.push(userStarredMessagesRef);
@@ -254,8 +247,7 @@ const MainNavigator = (props) => {
       if (!callsData) return;
 
       const incomingCall = Object.values(callsData).find(call =>
-        call.receiverId === userData.userId &&
-        call.status === "calling"
+        call.receiverId === userData.userId && call.status === "calling"
       );
 
       if (incomingCall) {
@@ -279,11 +271,12 @@ const MainNavigator = (props) => {
   }, []);
 
   if (isLoading) {
-    <View style={commonStyles.center}>
-      <ActivityIndicator size={'large'} color={colors.primary} />
-    </View>
+    return (
+      <View style={commonStyles.center}>
+        <ActivityIndicator size={'large'} color={colors.primary} />
+      </View>
+    );
   }
-
 
   return (
     <KeyboardAvoidingView

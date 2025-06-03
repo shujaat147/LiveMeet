@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import {
   View,
   Text,
@@ -29,10 +29,9 @@ import { launchImagePicker, openCamera, uploadImageAsync } from "../utils/imageP
 import { initiateCall } from "../utils/actions/callActions";
 import { FontAwesome } from "@expo/vector-icons";
 import { Audio } from "expo-av";
-import { startRecording, stopRecordingAndUpload } from "../utils/audioHelper"; // You’ll create this file
+import { startRecording, stopRecordingAndUpload } from "../utils/audioHelper";
 import { getDatabase, ref, push, set } from "firebase/database";
-import { useMemo } from "react";
-
+import { addUserChat } from "../utils/actions/userActions";
 
 const ChatScreen = (props) => {
   const [chatUsers, setChatUsers] = useState([]);
@@ -52,7 +51,6 @@ const ChatScreen = (props) => {
   const userData = useSelector(state => state.auth.userData);
   const storedUsers = useSelector(state => state.users.storedUsers);
   const storedChats = useSelector(state => state.chats.chatsData);
-
   const chatMessagesRaw = useSelector(state => state.messages.messagesData[chatId] || {});
 
   const chatMessages = useMemo(() => {
@@ -120,6 +118,11 @@ const ChatScreen = (props) => {
     setChatUsers(chatData.users);
   }, [chatUsers]);
 
+  const ensureChatReference = async (chatId) => {
+    // Ensure this chatId is present in userChats
+    await addUserChat(userData.userId, chatId);
+  };
+
   const sendMessage = useCallback(async () => {
     if (isSending || messageText.trim() === "") return;
 
@@ -129,6 +132,8 @@ const ChatScreen = (props) => {
       if (!id) {
         id = await createChat(userData.userId, props.route.params.newChatData);
         setChatId(id);
+      } else {
+        await ensureChatReference(id);
       }
 
       await sendTextMessage(id, userData, messageText, replyingTo?.key, chatUsers);
@@ -148,7 +153,6 @@ const ChatScreen = (props) => {
       await startRecording();
       setIsRecording(true);
 
-      // Start timer
       setRecordingDuration(0);
       recordingIntervalRef.current = setInterval(() => {
         setRecordingDuration(prev => prev + 1);
@@ -156,7 +160,6 @@ const ChatScreen = (props) => {
     } else {
       const audioUrl = await stopRecordingAndUpload(chatId);
       setIsRecording(false);
-
       clearInterval(recordingIntervalRef.current);
       setRecordingDuration(0);
 
@@ -165,6 +168,8 @@ const ChatScreen = (props) => {
         if (!id) {
           id = await createChat(userData.userId, props.route.params.newChatData);
           setChatId(id);
+        } else {
+          await ensureChatReference(id);
         }
 
         const voiceMessage = {
@@ -210,6 +215,8 @@ const ChatScreen = (props) => {
         if (!id) {
           id = await createChat(userData.userId, props.route.params.newChatData);
           setChatId(id);
+        } else {
+          await ensureChatReference(id);
         }
 
         const uploadUrl = await uploadImageAsync(uri, true);

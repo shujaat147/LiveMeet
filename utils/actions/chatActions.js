@@ -2,9 +2,9 @@ import { child, get, getDatabase, push, ref, remove, set, update } from "firebas
 import { getFirebaseApp } from "../firebaseHelper";
 import { getUserPushTokens } from "./authActions";
 import { addUserChat, deleteUserChat, getUserChats } from "./userActions";
+import { removeMessage } from "../../store/messagesSlice";
 
 export const createChat = async (loggedInUserId, chatData) => {
-
     const newChatData = {
         ...chatData,
         chatName: chatData.chatName ?? null,
@@ -12,7 +12,7 @@ export const createChat = async (loggedInUserId, chatData) => {
         updatedBy: loggedInUserId,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
-    };
+    };
 
     const app = getFirebaseApp();
     const dbRef = ref(getDatabase(app));
@@ -25,25 +25,25 @@ export const createChat = async (loggedInUserId, chatData) => {
     }
 
     return newChat.key;
-}
+};
 
 export const sendTextMessage = async (chatId, senderData, messageText, replyTo, chatUsers) => {
     await sendMessage(chatId, senderData.userId, messageText, null, replyTo, null);
 
     const otherUsers = chatUsers.filter(uid => uid !== senderData.userId);
     await sendPushNotificationForUsers(otherUsers, `${senderData.firstName} ${senderData.lastName}`, messageText, chatId);
-}
+};
 
 export const sendInfoMessage = async (chatId, senderId, messageText) => {
     await sendMessage(chatId, senderId, messageText, null, null, "info");
-}
+};
 
 export const sendImage = async (chatId, senderData, imageUrl, replyTo, chatUsers) => {
     await sendMessage(chatId, senderData.userId, 'Image', imageUrl, replyTo, null);
 
     const otherUsers = chatUsers.filter(uid => uid !== senderData.userId);
     await sendPushNotificationForUsers(otherUsers, `${senderData.firstName} ${senderData.lastName}`, `${senderData.firstName} sent an image`, chatId);
-}
+};
 
 export const updateChatData = async (chatId, userId, chatData) => {
     const app = getFirebaseApp();
@@ -54,8 +54,8 @@ export const updateChatData = async (chatId, userId, chatData) => {
         ...chatData,
         updatedAt: new Date().toISOString(),
         updatedBy: userId
-    })
-}
+    });
+};
 
 const sendMessage = async (chatId, senderId, messageText, imageUrl, replyTo, type) => {
     const app = getFirebaseApp();
@@ -88,7 +88,21 @@ const sendMessage = async (chatId, senderId, messageText, imageUrl, replyTo, typ
         updatedAt: new Date().toISOString(),
         latestMessageText: messageText
     });
-}
+
+    // ✅ Ensure all users still have this chat in their userChats list
+    const chatSnapshot = await get(chatRef);
+    if (chatSnapshot.exists()) {
+        const chatData = chatSnapshot.val();
+        for (const uid of chatData.users) {
+            const userChatsRef = child(dbRef, `userChats/${uid}`);
+            const userChatsSnap = await get(userChatsRef);
+            const alreadyHasChat = userChatsSnap.exists() && Object.values(userChatsSnap.val()).includes(chatId);
+            if (!alreadyHasChat) {
+                await push(userChatsRef, chatId);
+            }
+        }
+    }
+};
 
 export const starMessage = async (messageId, chatId, userId) => {
     try {
@@ -99,23 +113,56 @@ export const starMessage = async (messageId, chatId, userId) => {
         const snapshot = await get(childRef);
 
         if (snapshot.exists()) {
-            // Starred item exists - Un-star
             await remove(childRef);
-        }
-        else {
-            // Starred item does not exist - star
+        } else {
             const starredMessageData = {
                 messageId,
                 chatId,
                 starredAt: new Date().toISOString()
-            }
-
+            };
             await set(childRef, starredMessageData);
         }
     } catch (error) {
-        console.log(error);        
+        console.log(error);
     }
-}
+};
+
+export const unsendMessage = ({ chatId, messageId }) => {
+    return async (dispatch) => {
+        try {
+            const app = getFirebaseApp();
+            const db = getDatabase(app);
+
+            const msgRef = ref(db, `messages/${chatId}/${messageId}`);
+            await remove(msgRef);
+
+            dispatch(removeMessage({ chatId, messageId }));
+
+            const messagesSnap = await get(ref(db, `messages/${chatId}`));
+            const messagesData = messagesSnap.val();
+
+            let latestText = "";
+
+            if (messagesData) {
+                const sorted = Object.entries(messagesData).sort((a, b) =>
+                    new Date(a[1].sentAt) - new Date(b[1].sentAt)
+                );
+
+                const lastMsg = sorted[sorted.length - 1][1];
+                latestText =
+                    lastMsg.text ||
+                    (lastMsg.imageUrl ? "Image" : lastMsg.audioUrl ? "Voice Message" : "Message");
+            }
+
+            await update(ref(db, `chats/${chatId}`), {
+                latestMessageText: latestText,
+                updatedAt: new Date().toISOString()
+            });
+        } catch (error) {
+            console.log("Unsend failed:", error);
+        }
+    };
+};
 
 export const removeUserFromChat = async (userLoggedInData, userToRemoveData, chatData) => {
     const userToRemoveId = userToRemoveData.userId;
@@ -126,7 +173,6 @@ export const removeUserFromChat = async (userLoggedInData, userToRemoveData, cha
 
     for (const key in userChats) {
         const currentChatId = userChats[key];
-
         if (currentChatId === chatData.key) {
             await deleteUserChat(userToRemoveId, key);
             break;
@@ -138,7 +184,7 @@ export const removeUserFromChat = async (userLoggedInData, userToRemoveData, cha
         `${userLoggedInData.firstName} removed ${userToRemoveData.firstName} from the chat`;
 
     await sendInfoMessage(chatData.key, userLoggedInData.userId, messageText);
-}
+};
 
 export const addUsersToChat = async (userLoggedInData, usersToAddData, chatData) => {
     const existingUsers = Object.values(chatData.users);
@@ -158,17 +204,14 @@ export const addUsersToChat = async (userLoggedInData, usersToAddData, chatData)
         userAddedName = `${userToAdd.firstName} ${userToAdd.lastName}`;
     });
 
-    if (newUsers.length === 0) {
-        return;
-    }
+    if (newUsers.length === 0) return;
 
-    await updateChatData(chatData.key, userLoggedInData.userId, { users: existingUsers.concat(newUsers) })
+    await updateChatData(chatData.key, userLoggedInData.userId, { users: existingUsers.concat(newUsers) });
 
     const moreUsersMessage = newUsers.length > 1 ? `and ${newUsers.length - 1} others ` : '';
     const messageText = `${userLoggedInData.firstName} ${userLoggedInData.lastName} added ${userAddedName} ${moreUsersMessage}to the chat`;
     await sendInfoMessage(chatData.key, userLoggedInData.userId, messageText);
-
-}
+};
 
 export const logCallMessage = async (chatId, senderId, statusText, status) => {
     const app = getFirebaseApp();
@@ -193,15 +236,11 @@ export const logCallMessage = async (chatId, senderId, statusText, status) => {
     });
 };
 
-
 const sendPushNotificationForUsers = (chatUsers, title, body, chatId) => {
     chatUsers.forEach(async uid => {
-        console.log("test");
         const tokens = await getUserPushTokens(uid);
-
-        for(const key in tokens) {
+        for (const key in tokens) {
             const token = tokens[key];
-
             await fetch("https://exp.host/--/api/v2/push/send", {
                 method: "POST",
                 headers: {
@@ -213,7 +252,7 @@ const sendPushNotificationForUsers = (chatUsers, title, body, chatId) => {
                     body,
                     data: { chatId }
                 })
-            })
+            });
         }
-    })
-}
+    });
+};

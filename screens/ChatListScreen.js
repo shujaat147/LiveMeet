@@ -7,7 +7,7 @@ import DataItem from '../components/DataItem';
 import PageContainer from '../components/PageContainer';
 import PageTitle from '../components/PageTitle';
 import colors from '../constants/colors';
-import { deleteEntireChatForUser } from '../utils/actions/userActions'; // ✅
+import { deleteChatForCurrentUser } from '../utils/actions/userActions'; // ✅ NEW updated function
 import { removeChatData } from '../store/chatSlice'; // ✅
 
 const ChatListScreen = props => {
@@ -88,13 +88,13 @@ const ChatListScreen = props => {
 
     // ✅ Handle delete confirmation
     const handleDeleteChat = (chatId) => {
-        Alert.alert("Delete Chat", "Are you sure you want to delete this chat?", [
+        Alert.alert("Delete Chat", "Are you sure you want to delete this chat from your device only?", [
             { text: "Cancel", style: "cancel" },
             {
                 text: "Delete",
                 style: "destructive",
                 onPress: async () => {
-                    await deleteEntireChatForUser(userData.userId, chatId);
+                    await deleteChatForCurrentUser(userData.userId, chatId);
                     dispatch(removeChatData(chatId));
                 }
             }
@@ -142,7 +142,7 @@ const ChatListScreen = props => {
                             subTitle={subTitle}
                             image={image}
                             onPress={() => props.navigation.navigate("ChatScreen", { chatId })}
-                            onLongPress={() => handleDeleteChat(chatId)} // ✅ Added
+                            onLongPress={() => handleDeleteChat(chatId)}
                         />
                     );
                 }}

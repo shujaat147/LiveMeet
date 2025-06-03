@@ -5,9 +5,8 @@ import { Menu, MenuTrigger, MenuOptions, MenuOption } from 'react-native-popup-m
 import uuid from 'react-native-uuid';
 import * as Clipboard from 'expo-clipboard';
 import { Feather, FontAwesome } from '@expo/vector-icons';
-import { starMessage } from '../utils/actions/chatActions';
+import { starMessage, unsendMessage } from '../utils/actions/chatActions';
 import { useDispatch, useSelector } from 'react-redux';
-import { hideMessage } from '../store/messagesSlice';
 import { Audio } from 'expo-av';
 
 function formatAmPm(dateString) {
@@ -38,6 +37,7 @@ const Bubble = props => {
     const dispatch = useDispatch();
     const starredMessages = useSelector(state => state.messages.starredMessages[chatId]) || {};
     const storedUsers = useSelector(state => state.users.storedUsers);
+    const currentUserId = useSelector(state => state.auth.userId);
 
     const [isPlaying, setIsPlaying] = useState(false);
     const [playbackProgress, setPlaybackProgress] = useState(0);
@@ -86,8 +86,8 @@ const Bubble = props => {
         }
     };
 
-    const handleDeleteForMe = () => {
-        dispatch(hideMessage({ chatId, messageId }));
+    const handleUnsend = () => {
+        dispatch(unsendMessage({ chatId, messageId }));
     };
 
     const bubbleStyle = { ...styles.container };
@@ -124,7 +124,6 @@ const Bubble = props => {
             wrapperStyle.justifyContent = 'flex-start';
             bubbleStyle.maxWidth = '90%';
             Container = TouchableWithoutFeedback;
-            isUserMessage = true;
             break;
         case "reply":
             bubbleStyle.backgroundColor = '#F2F2F2';
@@ -174,7 +173,6 @@ const Bubble = props => {
                         </TouchableWithoutFeedback>
                     )}
 
-
                     {!audioUrl && !imageUrl && (
                         <Text style={textStyle}>{text}</Text>
                     )}
@@ -200,7 +198,9 @@ const Bubble = props => {
                             <MenuItem text="Copy to clipboard" icon="copy" onSelect={() => copyToClipboard(text)} />
                             <MenuItem text={`${isStarred ? 'Unstar' : 'Star'} message`} icon={isStarred ? 'star-o' : 'star'} iconPack={FontAwesome} onSelect={() => starMessage(messageId, chatId, userId)} />
                             <MenuItem text="Reply" icon="arrow-left-circle" onSelect={setReply} />
-                            <MenuItem text="Delete for me" icon="trash" onSelect={handleDeleteForMe} />
+                            {type === "myMessage" && (
+                                <MenuItem text="Unsend" icon="trash" onSelect={handleUnsend} />
+                            )}
                         </MenuOptions>
                     </Menu>
                 </View>
