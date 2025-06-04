@@ -173,4 +173,8 @@ dependencies {
     } else {
         implementation jscFlavor
     }
+    configurations.all {
+        exclude group: 'com.android.support', module: 'support-compat'
+        exclude group: 'com.android.support', module: 'support-media-compat'
+    }
 }

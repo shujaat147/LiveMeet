@@ -95,7 +95,7 @@ const ProfileImage = props => {
 const styles = StyleSheet.create({
     image: {
         borderRadius: 50,
-        borderColor: colors.grey,
+        borderColor: colors.blue,
         borderWidth: 1
     },
     editIconContainer: {

@@ -153,8 +153,8 @@ const ChatListScreen = props => {
 
 const styles = StyleSheet.create({
     newGroupText: {
-        color: colors.blue,
-        fontSize: 17,
+        color: colors.red,
+        fontSize: 18,
         marginBottom: 5
     }
 });

@@ -297,6 +297,7 @@ const styles = StyleSheet.create({
   text: {
     fontFamily: "regular",
     letterSpacing: 0.3,
+    fontSize: 16
   },
   menuItemContainer: {
     flexDirection: "row",
@@ -321,6 +322,7 @@ const styles = StyleSheet.create({
   name: {
     fontFamily: "medium",
     letterSpacing: 0.3,
+    fontSize: 16
   },
   image: {
     width: 300,

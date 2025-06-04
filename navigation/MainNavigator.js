@@ -24,6 +24,7 @@ import DataListScreen from "../screens/DataListScreen";
 import VoiceCallScreen from "../screens/VoiceCallScreen";
 import { StackActions, useNavigation } from '@react-navigation/native';
 import IncomingCallScreen from '../screens/IncomingCallScreen';
+import FullScreenImageScreen from "../screens/FullScreenImageScreen.js";
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -116,6 +117,14 @@ const StackNavigator = () => {
             presentation: 'fullScreenModal'
           }}
         />
+        <Stack.Screen
+          name="FullScreenImage"
+          component={FullScreenImageScreen}
+          options={{
+            headerShown: false,
+            presentation: 'transparentModal',
+          }}
+        />
       </Stack.Group>
 
       <Stack.Group screenOptions={{ presentation: 'containedModal' }}>
@@ -145,7 +154,7 @@ const MainNavigator = (props) => {
   useEffect(() => {
     registerForPushNotificationsAsync().then(token => setExpoPushToken(token));
 
-    notificationListener.current = Notifications.addNotificationReceivedListener(notification => {});
+    notificationListener.current = Notifications.addNotificationReceivedListener(notification => { });
 
     responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
       const { data } = response.notification.request.content;

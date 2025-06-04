@@ -293,8 +293,9 @@ const ChatScreen = (props) => {
   );
 
   const handleImagePress = (imageUrl) => {
-    console.log("Image pressed:", imageUrl);
+    props.navigation.navigate('FullScreenImage', { imageUrl });
   };
+
 
   return (
     <SafeAreaView edges={["right", "left", "bottom"]} style={styles.container}>
