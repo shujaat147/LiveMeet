@@ -325,6 +325,13 @@ const ChatScreen = (props) => {
                   flatList.current.scrollToEnd({ animated: false })
                 }
                 data={translatedMessages}
+                // below code for scroll to new msg
+                initialScrollIndex={translatedMessages.length > 0 ? translatedMessages.length - 1 : 0}
+                getItemLayout={(data, index) => ({
+                  length: 80, // approximate message height
+                  offset: 80 * index,
+                  index,
+                })}
                 renderItem={(itemData) => {
                   const message = itemData.item;
                   const isOwnMessage = message.sentBy === userData.userId;
