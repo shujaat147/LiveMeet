@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useRef, useState, useMemo } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useMemo,
+} from "react";
 import {
   View,
   Text,
@@ -24,14 +30,23 @@ import Bubble from "../components/Bubble";
 import ReplyTo from "../components/ReplyTo";
 import AwesomeAlert from "react-native-awesome-alerts";
 import CustomHeaderButton from "../components/CustomHeaderButton";
-import { createChat, sendImage, sendTextMessage } from "../utils/actions/chatActions";
-import { launchImagePicker, openCamera, uploadImageAsync } from "../utils/imagePickerHelper";
+import {
+  createChat,
+  sendImage,
+  sendTextMessage,
+} from "../utils/actions/chatActions";
+import {
+  launchImagePicker,
+  openCamera,
+  uploadImageAsync,
+} from "../utils/imagePickerHelper";
 import { initiateCall } from "../utils/actions/callActions";
 import { FontAwesome } from "@expo/vector-icons";
 import { Audio } from "expo-av";
 import { startRecording, stopRecordingAndUpload } from "../utils/audioHelper";
 import { getDatabase, ref, push, set } from "firebase/database";
 import { addUserChat } from "../utils/actions/userActions";
+import { translateText } from "../utils/translateHelper";
 
 const ChatScreen = (props) => {
   const [chatUsers, setChatUsers] = useState([]);
@@ -48,24 +63,57 @@ const ChatScreen = (props) => {
 
   const flatList = useRef();
 
-  const userData = useSelector(state => state.auth.userData);
-  const storedUsers = useSelector(state => state.users.storedUsers);
-  const storedChats = useSelector(state => state.chats.chatsData);
-  const chatMessagesRaw = useSelector(state => state.messages.messagesData[chatId] || {});
+  const userData = useSelector((state) => state.auth.userData);
+  const storedUsers = useSelector((state) => state.users.storedUsers);
+  const storedChats = useSelector((state) => state.chats.chatsData);
+  const chatMessagesRaw = useSelector(
+    (state) => state.messages.messagesData[chatId] || {}
+  );
 
   const chatMessages = useMemo(() => {
-    return Object.keys(chatMessagesRaw).map(key => ({
+    return Object.keys(chatMessagesRaw).map((key) => ({
       key,
       ...chatMessagesRaw[key],
     }));
   }, [chatMessagesRaw]);
 
-  const chatData = (chatId && storedChats[chatId]) || props.route?.params?.newChatData || {};
+  const preferredLanguage = userData?.preferredLanguage;
+  const [translatedMessages, setTranslatedMessages] = useState([]);
+
+  useEffect(() => {
+    const translateMessages = async () => {
+      const translated = await Promise.all(
+        chatMessages.map(async (msg) => {
+          if (
+            msg.text &&
+            msg.sentBy !== userData.userId &&
+            msg.language &&
+            preferredLanguage &&
+            !msg.language.startsWith(preferredLanguage)
+          ) {
+            const translatedText = await translateText(msg.text, preferredLanguage);
+            return { ...msg, translatedText };
+          } else {
+            return { ...msg };
+          }
+        })
+      );
+      setTranslatedMessages(translated);
+    };
+
+    translateMessages();
+  }, [chatMessages, preferredLanguage]);
+
+
+  const chatData =
+    (chatId && storedChats[chatId]) || props.route?.params?.newChatData || {};
 
   const getChatTitleFromName = () => {
-    const otherUserId = chatUsers.find(uid => uid !== userData.userId);
+    const otherUserId = chatUsers.find((uid) => uid !== userData.userId);
     const otherUserData = storedUsers[otherUserId];
-    return otherUserData && `${otherUserData.firstName} ${otherUserData.lastName}`;
+    return (
+      otherUserData && `${otherUserData.firstName} ${otherUserData.lastName}`
+    );
   };
 
   useEffect(() => {
@@ -81,20 +129,22 @@ const ChatScreen = (props) => {
                 title="Voice Call"
                 iconName="call-outline"
                 onPress={async () => {
-                  const otherUserId = chatUsers.find(uid => uid !== userData.userId);
+                  const otherUserId = chatUsers.find(
+                    (uid) => uid !== userData.userId
+                  );
                   const otherUserData = storedUsers[otherUserId];
 
                   await initiateCall({
                     chatId,
                     callerId: userData.userId,
-                    receiverId: otherUserId
+                    receiverId: otherUserId,
                   });
 
                   props.navigation.navigate("VoiceCall", {
                     chatId,
                     callerData: userData,
                     receiverData: otherUserData,
-                    isCaller: true
+                    isCaller: true,
                   });
                 }}
               />
@@ -105,7 +155,7 @@ const ChatScreen = (props) => {
                   chatData.isGroupChat
                     ? props.navigation.navigate("ChatSettings", { chatId })
                     : props.navigation.navigate("Contact", {
-                      uid: chatUsers.find(uid => uid !== userData.userId),
+                      uid: chatUsers.find((uid) => uid !== userData.userId),
                     })
                 }
               />
@@ -136,7 +186,13 @@ const ChatScreen = (props) => {
         await ensureChatReference(id);
       }
 
-      await sendTextMessage(id, userData, messageText, replyingTo?.key, chatUsers);
+      await sendTextMessage(
+        id,
+        userData,
+        messageText,
+        replyingTo?.key,
+        chatUsers
+      );
       setMessageText("");
       setReplyingTo(null);
     } catch (error) {
@@ -155,7 +211,7 @@ const ChatScreen = (props) => {
 
       setRecordingDuration(0);
       recordingIntervalRef.current = setInterval(() => {
-        setRecordingDuration(prev => prev + 1);
+        setRecordingDuration((prev) => prev + 1);
       }, 1000);
     } else {
       const audioUrl = await stopRecordingAndUpload(chatId);
@@ -166,7 +222,10 @@ const ChatScreen = (props) => {
       if (audioUrl) {
         let id = chatId;
         if (!id) {
-          id = await createChat(userData.userId, props.route.params.newChatData);
+          id = await createChat(
+            userData.userId,
+            props.route.params.newChatData
+          );
           setChatId(id);
         } else {
           await ensureChatReference(id);
@@ -213,7 +272,10 @@ const ChatScreen = (props) => {
       try {
         let id = chatId;
         if (!id) {
-          id = await createChat(userData.userId, props.route.params.newChatData);
+          id = await createChat(
+            userData.userId,
+            props.route.params.newChatData
+          );
           setChatId(id);
         } else {
           await ensureChatReference(id);
@@ -241,17 +303,28 @@ const ChatScreen = (props) => {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={100}
       >
-        <ImageBackground source={backgroundImage} style={styles.backgroundImage}>
+        <ImageBackground
+          source={backgroundImage}
+          style={styles.backgroundImage}
+        >
           <PageContainer style={{ backgroundColor: "transparent" }}>
-            {!chatId && <Bubble text="This is a new chat. Say hi!" type="system" />}
-            {errorBannerText !== "" && <Bubble text={errorBannerText} type="error" />}
+            {!chatId && (
+              <Bubble text="This is a new chat. Say hi!" type="system" />
+            )}
+            {errorBannerText !== "" && (
+              <Bubble text={errorBannerText} type="error" />
+            )}
 
             {chatId && (
               <FlatList
                 ref={(ref) => (flatList.current = ref)}
-                onContentSizeChange={() => flatList.current.scrollToEnd({ animated: false })}
-                onLayout={() => flatList.current.scrollToEnd({ animated: false })}
-                data={chatMessages}
+                onContentSizeChange={() =>
+                  flatList.current.scrollToEnd({ animated: false })
+                }
+                onLayout={() =>
+                  flatList.current.scrollToEnd({ animated: false })
+                }
+                data={translatedMessages}
                 renderItem={(itemData) => {
                   const message = itemData.item;
                   const isOwnMessage = message.sentBy === userData.userId;
@@ -262,20 +335,27 @@ const ChatScreen = (props) => {
                   }
 
                   const sender = message.sentBy && storedUsers[message.sentBy];
-                  const name = sender && `${sender.firstName} ${sender.lastName}`;
+                  const name =
+                    sender && `${sender.firstName} ${sender.lastName}`;
 
                   return (
                     <Bubble
                       type={messageType}
                       text={message.text}
+                      translatedText={message.translatedText}
                       audioUrl={message.audioUrl}
                       messageId={message.key}
                       userId={userData.userId}
                       chatId={chatId}
                       date={message.sentAt}
-                      name={!chatData.isGroupChat || isOwnMessage ? undefined : name}
+                      name={
+                        !chatData.isGroupChat || isOwnMessage ? undefined : name
+                      }
                       setReply={() => setReplyingTo(message)}
-                      replyingTo={message.replyTo && chatMessages.find(i => i.key === message.replyTo)}
+                      replyingTo={
+                        message.replyTo &&
+                        chatMessages.find((i) => i.key === message.replyTo)
+                      }
                       imageUrl={message.imageUrl}
                       onImagePress={handleImagePress}
                     />
@@ -311,14 +391,24 @@ const ChatScreen = (props) => {
               <Feather name="camera" size={24} color={colors.red} />
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity style={{ ...styles.mediaButton, ...styles.sendButton }} onPress={sendMessage}>
+            <TouchableOpacity
+              style={{ ...styles.mediaButton, ...styles.sendButton }}
+              onPress={sendMessage}
+            >
               <Feather name="send" size={20} color="white" />
             </TouchableOpacity>
           )}
 
           <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <TouchableOpacity style={styles.mediaButton} onPress={handleVoiceRecording}>
-              <FontAwesome name={isRecording ? "stop" : "microphone"} size={24} color={colors.red} />
+            <TouchableOpacity
+              style={styles.mediaButton}
+              onPress={handleVoiceRecording}
+            >
+              <FontAwesome
+                name={isRecording ? "stop" : "microphone"}
+                size={24}
+                color={colors.red}
+              />
             </TouchableOpacity>
             {isRecording && (
               <Text style={{ marginLeft: 6, color: colors.red }}>
@@ -347,9 +437,14 @@ const ChatScreen = (props) => {
             }}
             customView={
               <View>
-                {isLoading && <ActivityIndicator size="small" color={colors.primary} />}
+                {isLoading && (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                )}
                 {!isLoading && tempImageUri !== "" && (
-                  <Image source={{ uri: tempImageUri }} style={{ width: 200, height: 200 }} />
+                  <Image
+                    source={{ uri: tempImageUri }}
+                    style={{ width: 200, height: 200 }}
+                  />
                 )}
               </View>
             }

@@ -1,260 +1,332 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { Image, StyleSheet, Text, TouchableWithoutFeedback, View } from 'react-native';
-import colors from '../constants/colors';
-import { Menu, MenuTrigger, MenuOptions, MenuOption } from 'react-native-popup-menu';
-import uuid from 'react-native-uuid';
-import * as Clipboard from 'expo-clipboard';
-import { Feather, FontAwesome } from '@expo/vector-icons';
-import { starMessage, unsendMessage } from '../utils/actions/chatActions';
-import { useDispatch, useSelector } from 'react-redux';
-import { Audio } from 'expo-av';
+import React, { useRef, useState, useEffect } from "react";
+import {
+  Image,
+  StyleSheet,
+  Text,
+  TouchableWithoutFeedback,
+  View,
+} from "react-native";
+import colors from "../constants/colors";
+import {
+  Menu,
+  MenuTrigger,
+  MenuOptions,
+  MenuOption,
+} from "react-native-popup-menu";
+import uuid from "react-native-uuid";
+import * as Clipboard from "expo-clipboard";
+import { Feather, FontAwesome } from "@expo/vector-icons";
+import { starMessage, unsendMessage } from "../utils/actions/chatActions";
+import { useDispatch, useSelector } from "react-redux";
+import { Audio } from "expo-av";
 
 function formatAmPm(dateString) {
-    const date = new Date(dateString);
-    let hours = date.getHours();
-    let minutes = date.getMinutes();
-    const ampm = hours >= 12 ? 'pm' : 'am';
-    hours = hours % 12 || 12;
-    minutes = minutes < 10 ? '0' + minutes : minutes;
-    return hours + ':' + minutes + ' ' + ampm;
+  const date = new Date(dateString);
+  let hours = date.getHours();
+  let minutes = date.getMinutes();
+  const ampm = hours >= 12 ? "pm" : "am";
+  hours = hours % 12 || 12;
+  minutes = minutes < 10 ? "0" + minutes : minutes;
+  return hours + ":" + minutes + " " + ampm;
 }
 
-const MenuItem = props => {
-    const Icon = props.iconPack ?? Feather;
-    return (
-        <MenuOption onSelect={props.onSelect} text="">
-            <View style={styles.menuItemContainer}>
-                <Text style={styles.menuText}>{props.text}</Text>
-                <Icon name={props.icon} size={18} />
-            </View>
-        </MenuOption>
-    );
+const MenuItem = (props) => {
+  const Icon = props.iconPack ?? Feather;
+  return (
+    <MenuOption onSelect={props.onSelect} text="">
+      <View style={styles.menuItemContainer}>
+        <Text style={styles.menuText}>{props.text}</Text>
+        <Icon name={props.icon} size={18} />
+      </View>
+    </MenuOption>
+  );
 };
 
-const Bubble = props => {
-    const { text, type, messageId, chatId, userId, date, setReply, replyingTo, name, imageUrl, audioUrl, onImagePress } = props;
+const Bubble = (props) => {
+  const {
+    text,
+    translatedText,
+    type,
+    messageId,
+    chatId,
+    userId,
+    date,
+    setReply,
+    replyingTo,
+    name,
+    imageUrl,
+    audioUrl,
+    onImagePress,
+  } = props;
 
-    const dispatch = useDispatch();
-    const starredMessages = useSelector(state => state.messages.starredMessages[chatId]) || {};
-    const storedUsers = useSelector(state => state.users.storedUsers);
-    const currentUserId = useSelector(state => state.auth.userId);
+  const dispatch = useDispatch();
+  const starredMessages =
+    useSelector((state) => state.messages.starredMessages[chatId]) || {};
+  const storedUsers = useSelector((state) => state.users.storedUsers);
+  const currentUserId = useSelector((state) => state.auth.userId);
 
-    const [isPlaying, setIsPlaying] = useState(false);
-    const [playbackProgress, setPlaybackProgress] = useState(0);
-    const playbackRef = useRef(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playbackProgress, setPlaybackProgress] = useState(0);
+  const playbackRef = useRef(null);
 
-    useEffect(() => {
-        return () => {
-            if (playbackRef.current) {
-                playbackRef.current.unloadAsync();
-            }
-        };
-    }, []);
-
-    const playSound = async (uri) => {
-        try {
-            setIsPlaying(true);
-            const { sound } = await Audio.Sound.createAsync(
-                { uri },
-                { shouldPlay: true },
-                onPlaybackStatusUpdate
-            );
-            playbackRef.current = sound;
-            await sound.playAsync();
-        } catch (error) {
-            console.log("Error playing sound:", error);
-        }
+  useEffect(() => {
+    return () => {
+      if (playbackRef.current) {
+        playbackRef.current.unloadAsync();
+      }
     };
+  }, []);
 
-    const onPlaybackStatusUpdate = status => {
-        if (status.isLoaded) {
-            if (status.didJustFinish) {
-                setIsPlaying(false);
-                setPlaybackProgress(0);
-                playbackRef.current?.unloadAsync();
-            } else {
-                setPlaybackProgress(Math.floor(status.positionMillis / 1000));
-            }
-        }
-    };
-
-    const copyToClipboard = async text => {
-        try {
-            await Clipboard.setStringAsync(text);
-        } catch (error) {
-            console.log(error);
-        }
-    };
-
-    const handleUnsend = () => {
-        dispatch(unsendMessage({ chatId, messageId }));
-    };
-
-    const bubbleStyle = { ...styles.container };
-    const textStyle = { ...styles.text };
-    const wrapperStyle = { ...styles.wrapperStyle };
-
-    const menuRef = useRef(null);
-    const id = useRef(uuid.v4());
-
-    let Container = View;
-    let isUserMessage = false;
-    const dateString = date && formatAmPm(date);
-
-    switch (type) {
-        case "system":
-            textStyle.color = '#65644A';
-            bubbleStyle.backgroundColor = colors.beige;
-            bubbleStyle.alignItems = 'center';
-            bubbleStyle.marginTop = 10;
-            break;
-        case "error":
-            bubbleStyle.backgroundColor = colors.red;
-            textStyle.color = 'white';
-            bubbleStyle.marginTop = 10;
-            break;
-        case "myMessage":
-            wrapperStyle.justifyContent = 'flex-end';
-            bubbleStyle.backgroundColor = '#E7FED6';
-            bubbleStyle.maxWidth = '90%';
-            Container = TouchableWithoutFeedback;
-            isUserMessage = true;
-            break;
-        case "theirMessage":
-            wrapperStyle.justifyContent = 'flex-start';
-            bubbleStyle.maxWidth = '90%';
-            Container = TouchableWithoutFeedback;
-            break;
-        case "reply":
-            bubbleStyle.backgroundColor = '#F2F2F2';
-            break;
-        case "info":
-            bubbleStyle.backgroundColor = 'white';
-            bubbleStyle.alignItems = 'center';
-            textStyle.color = colors.textColor;
-            break;
-        default:
-            break;
+  const playSound = async (uri) => {
+    try {
+      setIsPlaying(true);
+      const { sound } = await Audio.Sound.createAsync(
+        { uri },
+        { shouldPlay: true },
+        onPlaybackStatusUpdate
+      );
+      playbackRef.current = sound;
+      await sound.playAsync();
+    } catch (error) {
+      console.log("Error playing sound:", error);
     }
+  };
 
-    const isStarred = isUserMessage && starredMessages[messageId] !== undefined;
-    const replyingToUser = replyingTo && storedUsers[replyingTo.sentBy];
+  const onPlaybackStatusUpdate = (status) => {
+    if (status.isLoaded) {
+      if (status.didJustFinish) {
+        setIsPlaying(false);
+        setPlaybackProgress(0);
+        playbackRef.current?.unloadAsync();
+      } else {
+        setPlaybackProgress(Math.floor(status.positionMillis / 1000));
+      }
+    }
+  };
 
-    return (
-        <View style={wrapperStyle}>
-            <Container onLongPress={() => menuRef.current?.props?.ctx?.menuActions?.openMenu(id.current)} style={{ width: '100%' }}>
-                <View style={bubbleStyle}>
-                    {name && type !== "info" && (
-                        <Text style={styles.name}>{name}</Text>
-                    )}
+  const copyToClipboard = async (text) => {
+    try {
+      await Clipboard.setStringAsync(text);
+    } catch (error) {
+      console.log(error);
+    }
+  };
 
-                    {replyingToUser && (
-                        <Bubble
-                            type='reply'
-                            text={replyingTo.text}
-                            name={`${replyingToUser.firstName} ${replyingToUser.lastName}`}
-                        />
-                    )}
+  const handleUnsend = () => {
+    dispatch(unsendMessage({ chatId, messageId }));
+  };
 
-                    {audioUrl && !imageUrl && (
-                        <TouchableWithoutFeedback onPress={() => {
-                            if (!isPlaying) {
-                                playSound(audioUrl);
-                            }
-                        }}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 5 }}>
-                                <FontAwesome
-                                    name={isPlaying ? "pause-circle" : "play-circle"}
-                                    size={28}
-                                    color={colors.red}
-                                />
-                                <Text style={{ marginLeft: 10 }}>{isPlaying ? `${playbackProgress}s` : "Voice Message"}</Text>
-                            </View>
-                        </TouchableWithoutFeedback>
-                    )}
+  const bubbleStyle = { ...styles.container };
+  const textStyle = { ...styles.text };
+  const wrapperStyle = { ...styles.wrapperStyle };
 
-                    {!audioUrl && !imageUrl && (
-                        <Text style={textStyle}>{text}</Text>
-                    )}
+  const menuRef = useRef(null);
+  const id = useRef(uuid.v4());
 
-                    {imageUrl && (
-                        <TouchableWithoutFeedback onPress={() => onImagePress?.(imageUrl)}>
-                            <Image source={{ uri: imageUrl }} style={styles.image} />
-                        </TouchableWithoutFeedback>
-                    )}
+  let Container = View;
+  let isUserMessage = false;
+  const dateString = date && formatAmPm(date);
 
-                    {dateString && type !== "info" && (
-                        <View style={styles.timeContainer}>
-                            {isStarred && (
-                                <FontAwesome name='star' size={14} color={colors.textColor} style={{ marginRight: 5 }} />
-                            )}
-                            <Text style={styles.time}>{dateString}</Text>
-                        </View>
-                    )}
+  switch (type) {
+    case "system":
+      textStyle.color = "#65644A";
+      bubbleStyle.backgroundColor = colors.beige;
+      bubbleStyle.alignItems = "center";
+      bubbleStyle.marginTop = 10;
+      break;
+    case "error":
+      bubbleStyle.backgroundColor = colors.red;
+      textStyle.color = "white";
+      bubbleStyle.marginTop = 10;
+      break;
+    case "myMessage":
+      wrapperStyle.justifyContent = "flex-end";
+      bubbleStyle.backgroundColor = "#E7FED6";
+      bubbleStyle.maxWidth = "90%";
+      Container = TouchableWithoutFeedback;
+      isUserMessage = true;
+      break;
+    case "theirMessage":
+      wrapperStyle.justifyContent = "flex-start";
+      bubbleStyle.maxWidth = "90%";
+      Container = TouchableWithoutFeedback;
+      break;
+    case "reply":
+      bubbleStyle.backgroundColor = "#F2F2F2";
+      break;
+    case "info":
+      bubbleStyle.backgroundColor = "white";
+      bubbleStyle.alignItems = "center";
+      textStyle.color = colors.textColor;
+      break;
+    default:
+      break;
+  }
 
-                    <Menu name={id.current} ref={menuRef}>
-                        <MenuTrigger />
-                        <MenuOptions>
-                            <MenuItem text="Copy to clipboard" icon="copy" onSelect={() => copyToClipboard(text)} />
-                            <MenuItem text={`${isStarred ? 'Unstar' : 'Star'} message`} icon={isStarred ? 'star-o' : 'star'} iconPack={FontAwesome} onSelect={() => starMessage(messageId, chatId, userId)} />
-                            <MenuItem text="Reply" icon="arrow-left-circle" onSelect={setReply} />
-                            {type === "myMessage" && (
-                                <MenuItem text="Unsend" icon="trash" onSelect={handleUnsend} />
-                            )}
-                        </MenuOptions>
-                    </Menu>
-                </View>
-            </Container>
+  const isStarred = isUserMessage && starredMessages[messageId] !== undefined;
+  const replyingToUser = replyingTo && storedUsers[replyingTo.sentBy];
+
+  return (
+    <View style={wrapperStyle}>
+      <Container
+        onLongPress={() =>
+          menuRef.current?.props?.ctx?.menuActions?.openMenu(id.current)
+        }
+        style={{ width: "100%" }}
+      >
+        <View style={bubbleStyle}>
+          {name && type !== "info" && <Text style={styles.name}>{name}</Text>}
+
+          {replyingToUser && (
+            <Bubble
+              type="reply"
+              text={replyingTo.text}
+              name={`${replyingToUser.firstName} ${replyingToUser.lastName}`}
+            />
+          )}
+
+          {audioUrl && !imageUrl && (
+            <TouchableWithoutFeedback
+              onPress={() => {
+                if (!isPlaying) {
+                  playSound(audioUrl);
+                }
+              }}
+            >
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  marginVertical: 5,
+                }}
+              >
+                <FontAwesome
+                  name={isPlaying ? "pause-circle" : "play-circle"}
+                  size={28}
+                  color={colors.red}
+                />
+                <Text style={{ marginLeft: 10 }}>
+                  {isPlaying ? `${playbackProgress}s` : "Voice Message"}
+                </Text>
+              </View>
+            </TouchableWithoutFeedback>
+          )}
+
+          {!audioUrl && !imageUrl && (
+            <View>
+              {/* Original text */}
+              <Text style={textStyle}>{text}</Text>
+
+              {/* Translated text shown only if available */}
+              {translatedText && (
+                <Text
+                  style={[
+                    textStyle,
+                    { fontStyle: "italic", color: "gray", marginTop: 4 },
+                  ]}
+                >
+                  {translatedText}
+                </Text>
+              )}
+            </View>
+          )}
+
+          {imageUrl && (
+            <TouchableWithoutFeedback onPress={() => onImagePress?.(imageUrl)}>
+              <Image source={{ uri: imageUrl }} style={styles.image} />
+            </TouchableWithoutFeedback>
+          )}
+
+          {dateString && type !== "info" && (
+            <View style={styles.timeContainer}>
+              {isStarred && (
+                <FontAwesome
+                  name="star"
+                  size={14}
+                  color={colors.textColor}
+                  style={{ marginRight: 5 }}
+                />
+              )}
+              <Text style={styles.time}>{dateString}</Text>
+            </View>
+          )}
+
+          <Menu name={id.current} ref={menuRef}>
+            <MenuTrigger />
+            <MenuOptions>
+              <MenuItem
+                text="Copy to clipboard"
+                icon="copy"
+                onSelect={() => copyToClipboard(text)}
+              />
+              <MenuItem
+                text={`${isStarred ? "Unstar" : "Star"} message`}
+                icon={isStarred ? "star-o" : "star"}
+                iconPack={FontAwesome}
+                onSelect={() => starMessage(messageId, chatId, userId)}
+              />
+              <MenuItem
+                text="Reply"
+                icon="arrow-left-circle"
+                onSelect={setReply}
+              />
+              {type === "myMessage" && (
+                <MenuItem text="Unsend" icon="trash" onSelect={handleUnsend} />
+              )}
+            </MenuOptions>
+          </Menu>
         </View>
-    );
+      </Container>
+    </View>
+  );
 };
 
 const styles = StyleSheet.create({
-    wrapperStyle: {
-        flexDirection: 'row',
-        justifyContent: 'center'
-    },
-    container: {
-        backgroundColor: 'white',
-        borderRadius: 6,
-        padding: 5,
-        marginBottom: 10,
-        borderColor: '#E2DACC',
-        borderWidth: 1
-    },
-    text: {
-        fontFamily: 'regular',
-        letterSpacing: 0.3
-    },
-    menuItemContainer: {
-        flexDirection: 'row',
-        padding: 5
-    },
-    menuText: {
-        flex: 1,
-        fontFamily: 'regular',
-        letterSpacing: 0.3,
-        fontSize: 16
-    },
-    timeContainer: {
-        flexDirection: 'row',
-        justifyContent: 'flex-end'
-    },
-    time: {
-        fontFamily: 'regular',
-        letterSpacing: 0.3,
-        color: colors.grey,
-        fontSize: 12
-    },
-    name: {
-        fontFamily: 'medium',
-        letterSpacing: 0.3
-    },
-    image: {
-        width: 300,
-        height: 300,
-        marginBottom: 5
-    }
+  wrapperStyle: {
+    flexDirection: "row",
+    justifyContent: "center",
+  },
+  container: {
+    backgroundColor: "white",
+    borderRadius: 6,
+    padding: 5,
+    marginBottom: 10,
+    borderColor: "#E2DACC",
+    borderWidth: 1,
+  },
+  text: {
+    fontFamily: "regular",
+    letterSpacing: 0.3,
+  },
+  menuItemContainer: {
+    flexDirection: "row",
+    padding: 5,
+  },
+  menuText: {
+    flex: 1,
+    fontFamily: "regular",
+    letterSpacing: 0.3,
+    fontSize: 16,
+  },
+  timeContainer: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+  },
+  time: {
+    fontFamily: "regular",
+    letterSpacing: 0.3,
+    color: colors.grey,
+    fontSize: 12,
+  },
+  name: {
+    fontFamily: "medium",
+    letterSpacing: 0.3,
+  },
+  image: {
+    width: 300,
+    height: 300,
+    marginBottom: 5,
+  },
 });
 
 export default Bubble;
