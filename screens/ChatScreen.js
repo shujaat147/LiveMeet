@@ -45,13 +45,13 @@ import { FontAwesome } from "@expo/vector-icons";
 import { Audio } from "expo-av";
 import { startRecording, stopRecordingAndUpload } from "../utils/audioHelper";
 import { getDatabase, ref, push, set } from "firebase/database";
-import { addUserChat } from "../utils/actions/userActions";
 import { translateText } from "../utils/translateHelper";
 
 const ChatScreen = (props) => {
   const [chatUsers, setChatUsers] = useState([]);
   const [messageText, setMessageText] = useState("");
-  const [chatId, setChatId] = useState(props.route?.params?.chatId);
+  const routeChatId = props.route?.params?.chatId;
+  const [chatId, setChatId] = useState(routeChatId);
   const [errorBannerText, setErrorBannerText] = useState("");
   const [replyingTo, setReplyingTo] = useState();
   const [tempImageUri, setTempImageUri] = useState("");
@@ -117,10 +117,23 @@ const ChatScreen = (props) => {
   };
 
   useEffect(() => {
-    if (!chatData) return;
+    console.log("📨 ChatScreen mounted with chatId:", chatId);
+    console.log("🧑‍🤝‍🧑 Initial chat users:", chatData.users);
+  }, []);
+
+
+  useEffect(() => {
+    if (!chatData || !chatData.users) return;
+    setChatUsers(chatData.users);
+  }, [chatData]);
+
+  useEffect(() => {
+    if (!chatUsers || chatUsers.length === 0) return;
+
+    const chatTitle = chatData.chatName ?? getChatTitleFromName();
 
     props.navigation.setOptions({
-      headerTitle: chatData.chatName ?? getChatTitleFromName(),
+      headerTitle: chatTitle,
       headerRight: () => (
         <HeaderButtons HeaderButtonComponent={CustomHeaderButton}>
           {chatId && (
@@ -129,9 +142,7 @@ const ChatScreen = (props) => {
                 title="Voice Call"
                 iconName="call-outline"
                 onPress={async () => {
-                  const otherUserId = chatUsers.find(
-                    (uid) => uid !== userData.userId
-                  );
+                  const otherUserId = chatUsers.find(uid => uid !== userData.userId);
                   const otherUserData = storedUsers[otherUserId];
 
                   await initiateCall({
@@ -162,16 +173,10 @@ const ChatScreen = (props) => {
             </>
           )}
         </HeaderButtons>
-      ),
+      )
     });
+  }, [chatUsers, chatId]);
 
-    setChatUsers(chatData.users);
-  }, [chatUsers]);
-
-  const ensureChatReference = async (chatId) => {
-    // Ensure this chatId is present in userChats
-    await addUserChat(userData.userId, chatId);
-  };
 
   const sendMessage = useCallback(async () => {
     if (isSending || messageText.trim() === "") return;
@@ -181,9 +186,12 @@ const ChatScreen = (props) => {
       let id = chatId;
       if (!id) {
         id = await createChat(userData.userId, props.route.params.newChatData);
+
+        // ✅ Save to local state
         setChatId(id);
-      } else {
-        await ensureChatReference(id);
+
+        // ✅ Navigate to same screen with new chatId param (force rerender)
+        props.navigation.setParams({ chatId: id });
       }
 
       await sendTextMessage(
@@ -191,7 +199,7 @@ const ChatScreen = (props) => {
         userData,
         messageText,
         replyingTo?.key,
-        chatUsers
+        chatUsers.length > 0 ? chatUsers : chatData.users
       );
       setMessageText("");
       setReplyingTo(null);
@@ -227,8 +235,6 @@ const ChatScreen = (props) => {
             props.route.params.newChatData
           );
           setChatId(id);
-        } else {
-          await ensureChatReference(id);
         }
 
         const voiceMessage = {
@@ -277,8 +283,6 @@ const ChatScreen = (props) => {
             props.route.params.newChatData
           );
           setChatId(id);
-        } else {
-          await ensureChatReference(id);
         }
 
         const uploadUrl = await uploadImageAsync(uri, true);

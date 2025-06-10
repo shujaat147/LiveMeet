@@ -16,7 +16,7 @@ import {
 import uuid from "react-native-uuid";
 import * as Clipboard from "expo-clipboard";
 import { Feather, FontAwesome } from "@expo/vector-icons";
-import { starMessage, unsendMessage } from "../utils/actions/chatActions";
+import { starMessage } from "../utils/actions/chatActions";
 import { useDispatch, useSelector } from "react-redux";
 import { Audio } from "expo-av";
 
@@ -63,7 +63,6 @@ const Bubble = (props) => {
   const starredMessages =
     useSelector((state) => state.messages.starredMessages[chatId]) || {};
   const storedUsers = useSelector((state) => state.users.storedUsers);
-  const currentUserId = useSelector((state) => state.auth.userId);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackProgress, setPlaybackProgress] = useState(0);
@@ -110,10 +109,6 @@ const Bubble = (props) => {
     } catch (error) {
       console.log(error);
     }
-  };
-
-  const handleUnsend = () => {
-    dispatch(unsendMessage({ chatId, messageId }));
   };
 
   const bubbleStyle = { ...styles.container };
@@ -270,9 +265,6 @@ const Bubble = (props) => {
                 icon="arrow-left-circle"
                 onSelect={setReply}
               />
-              {type === "myMessage" && (
-                <MenuItem text="Unsend" icon="trash" onSelect={handleUnsend} />
-              )}
             </MenuOptions>
           </Menu>
         </View>
@@ -297,7 +289,7 @@ const styles = StyleSheet.create({
   text: {
     fontFamily: "regular",
     letterSpacing: 0.3,
-    fontSize: 16
+    fontSize: 16,
   },
   menuItemContainer: {
     flexDirection: "row",
@@ -322,7 +314,7 @@ const styles = StyleSheet.create({
   name: {
     fontFamily: "medium",
     letterSpacing: 0.3,
-    fontSize: 16
+    fontSize: 16,
   },
   image: {
     width: 300,

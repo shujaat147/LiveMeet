@@ -34,13 +34,6 @@ const messagesSlice = createSlice({
             if (!currentMessages) return;
 
             delete currentMessages[messageId];
-        },
-
-        removeMessage: (state, action) => {
-            const { chatId, messageId } = action.payload;
-            if (state.messagesData[chatId]) {
-                delete state.messagesData[chatId][messageId];
-            }
         }
     }
 });
@@ -51,7 +44,6 @@ export const {
     removeStarredMessage,
     setStarredMessages,
     hideMessage,
-    removeMessage,
 } = messagesSlice.actions;
 
 export default messagesSlice.reducer;

@@ -12,13 +12,13 @@ import NewChatScreen from "../screens/NewChatScreen";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useDispatch, useSelector } from "react-redux";
 import { getFirebaseApp } from "../utils/firebaseHelper";
-import { child, get, getDatabase, off, onValue, ref, onChildRemoved } from "firebase/database";
+import { child, get, getDatabase, off, onValue, ref } from "firebase/database";
 import { setChatsData } from "../store/chatSlice";
 import { ActivityIndicator, KeyboardAvoidingView, Platform, View } from "react-native";
 import colors from "../constants/colors";
 import commonStyles from "../constants/commonStyles";
 import { setStoredUsers } from "../store/userSlice";
-import { setChatMessages, setStarredMessages, removeMessage } from "../store/messagesSlice";
+import { setChatMessages, setStarredMessages } from "../store/messagesSlice";
 import ContactScreen from "../screens/ContactScreen";
 import DataListScreen from "../screens/DataListScreen";
 import VoiceCallScreen from "../screens/VoiceCallScreen";
@@ -138,7 +138,6 @@ const StackNavigator = () => {
 }
 
 const MainNavigator = (props) => {
-
   const dispatch = useDispatch();
   const navigation = useNavigation();
 
@@ -148,13 +147,16 @@ const MainNavigator = (props) => {
   const storedUsers = useSelector(state => state.users.storedUsers);
 
   const [expoPushToken, setExpoPushToken] = useState('');
+  // console.log(expoPushToken)
   const notificationListener = useRef();
   const responseListener = useRef();
 
   useEffect(() => {
     registerForPushNotificationsAsync().then(token => setExpoPushToken(token));
 
-    notificationListener.current = Notifications.addNotificationReceivedListener(notification => { });
+    notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
+      // Handle received notification
+    });
 
     responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
       const { data } = response.notification.request.content;
@@ -198,9 +200,11 @@ const MainNavigator = (props) => {
           chatsFoundCount++;
 
           const data = chatSnapshot.val();
-
           if (data) {
-            if (!data.users.includes(userData.userId)) return;
+
+            if (!data.users.includes(userData.userId)) {
+              return;
+            }
 
             data.key = chatSnapshot.key;
 
@@ -208,10 +212,13 @@ const MainNavigator = (props) => {
               if (storedUsers[userId]) return;
 
               const userRef = child(dbRef, `users/${userId}`);
-              get(userRef).then(userSnapshot => {
-                const userSnapshotData = userSnapshot.val();
-                dispatch(setStoredUsers({ newUsers: { userSnapshotData } }))
-              })
+
+              get(userRef)
+                .then(userSnapshot => {
+                  const userSnapshotData = userSnapshot.val();
+                  dispatch(setStoredUsers({ newUsers: { [userId]: userSnapshotData } }));
+                })
+
               refs.push(userRef);
             })
 
@@ -230,18 +237,14 @@ const MainNavigator = (props) => {
         onValue(messagesRef, messagesSnapshot => {
           const messagesData = messagesSnapshot.val();
           dispatch(setChatMessages({ chatId, messagesData }));
-        });
-
-        onChildRemoved(messagesRef, snapshot => {
-          const messageId = snapshot.key;
-          dispatch(removeMessage({ chatId, messageId }));
-        });
+        })
 
         if (chatsFoundCount == 0) {
           setIsLoading(false);
         }
       }
-    });
+
+    })
 
     const userStarredMessagesRef = child(dbRef, `userStarredMessages/${userData.userId}`);
     refs.push(userStarredMessagesRef);
@@ -276,15 +279,13 @@ const MainNavigator = (props) => {
     return () => {
       console.log("Unsubscribing firebase listeners");
       refs.forEach(ref => off(ref));
-    }
+    };
   }, []);
 
   if (isLoading) {
-    return (
-      <View style={commonStyles.center}>
-        <ActivityIndicator size={'large'} color={colors.primary} />
-      </View>
-    );
+    <View style={commonStyles.center}>
+      <ActivityIndicator size={'large'} color={colors.primary} />
+    </View>
   }
 
   return (

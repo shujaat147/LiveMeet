@@ -11,7 +11,6 @@ import {
 import { getFirebaseApp } from "../firebaseHelper";
 import { getUserPushTokens } from "./authActions";
 import { addUserChat, deleteUserChat, getUserChats } from "./userActions";
-import { removeMessage } from "../../store/messagesSlice";
 import { detectLanguage } from "../translateHelper";
 
 export const createChat = async (loggedInUserId, chatData) => {
@@ -120,7 +119,7 @@ const sendMessage = async (
     sentBy: senderId,
     sentAt: new Date().toISOString(),
     text: messageText,
-    language: detectedLang, // ✅ store original language
+    language: detectedLang,
   };
 
   if (replyTo) {
@@ -143,22 +142,6 @@ const sendMessage = async (
     updatedAt: new Date().toISOString(),
     latestMessageText: messageText,
   });
-
-  // ✅ Ensure all users still have this chat in their userChats list
-  const chatSnapshot = await get(chatRef);
-  if (chatSnapshot.exists()) {
-    const chatData = chatSnapshot.val();
-    for (const uid of chatData.users) {
-      const userChatsRef = child(dbRef, `userChats/${uid}`);
-      const userChatsSnap = await get(userChatsRef);
-      const alreadyHasChat =
-        userChatsSnap.exists() &&
-        Object.values(userChatsSnap.val()).includes(chatId);
-      if (!alreadyHasChat) {
-        await push(userChatsRef, chatId);
-      }
-    }
-  }
 };
 
 export const starMessage = async (messageId, chatId, userId) => {
@@ -185,47 +168,6 @@ export const starMessage = async (messageId, chatId, userId) => {
   } catch (error) {
     console.log(error);
   }
-};
-
-export const unsendMessage = ({ chatId, messageId }) => {
-  return async (dispatch) => {
-    try {
-      const app = getFirebaseApp();
-      const db = getDatabase(app);
-
-      const msgRef = ref(db, `messages/${chatId}/${messageId}`);
-      await remove(msgRef);
-
-      dispatch(removeMessage({ chatId, messageId }));
-
-      const messagesSnap = await get(ref(db, `messages/${chatId}`));
-      const messagesData = messagesSnap.val();
-
-      let latestText = "";
-
-      if (messagesData) {
-        const sorted = Object.entries(messagesData).sort(
-          (a, b) => new Date(a[1].sentAt) - new Date(b[1].sentAt)
-        );
-
-        const lastMsg = sorted[sorted.length - 1][1];
-        latestText =
-          lastMsg.text ||
-          (lastMsg.imageUrl
-            ? "Image"
-            : lastMsg.audioUrl
-            ? "Voice Message"
-            : "Message");
-      }
-
-      await update(ref(db, `chats/${chatId}`), {
-        latestMessageText: latestText,
-        updatedAt: new Date().toISOString(),
-      });
-    } catch (error) {
-      console.log("Unsend failed:", error);
-    }
-  };
 };
 
 export const removeUserFromChat = async (

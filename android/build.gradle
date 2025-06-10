@@ -38,11 +38,12 @@ allprojects {
         mavenCentral()
         maven { url 'https://www.jitpack.io' }
     }
-}
-
-configurations.all {
-    resolutionStrategy {
-        force 'androidx.core:core:1.13.1'
-        force 'androidx.media:media:1.4.3'
+    configurations.all {
+    resolutionStrategy.eachDependency { DependencyResolveDetails details ->
+      if (details.requested.group == 'com.android.support') {
+        details.useVersion '28.0.0'  // Optional: you can also force removal
+        details.because 'Replacing legacy support library with AndroidX'
+      }
+    }
     }
 }

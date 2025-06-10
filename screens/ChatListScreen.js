@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'; 
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert } from 'react-native';
 import { HeaderButtons, Item } from 'react-navigation-header-buttons';
 import { useDispatch, useSelector } from 'react-redux';
@@ -7,8 +7,8 @@ import DataItem from '../components/DataItem';
 import PageContainer from '../components/PageContainer';
 import PageTitle from '../components/PageTitle';
 import colors from '../constants/colors';
-import { deleteChatForCurrentUser } from '../utils/actions/userActions'; // ✅ NEW updated function
-import { removeChatData } from '../store/chatSlice'; // ✅
+import { deleteChatForCurrentUser } from '../utils/actions/userActions';
+import { removeChatData } from '../store/chatSlice';
 
 const ChatListScreen = props => {
     const dispatch = useDispatch();
@@ -88,13 +88,13 @@ const ChatListScreen = props => {
 
     // ✅ Handle delete confirmation
     const handleDeleteChat = (chatId) => {
-        Alert.alert("Delete Chat", "Are you sure you want to delete this chat from your device only?", [
+        Alert.alert("Delete Chat", "Are you sure you want to delete this chat?", [
             { text: "Cancel", style: "cancel" },
             {
                 text: "Delete",
                 style: "destructive",
                 onPress: async () => {
-                    await deleteChatForCurrentUser(userData.userId, chatId);
+                    await deleteEntireChatForUser(userData.userId, chatId);
                     dispatch(removeChatData(chatId));
                 }
             }

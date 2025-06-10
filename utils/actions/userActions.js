@@ -96,7 +96,7 @@ export const searchUsers = async (queryText) => {
   }
 };
 
-// ✅ Safe: Delete only chat reference from current user's chat list
+// Delete only chat reference from current user's chat list
 export const deleteChatForCurrentUser = async (userId, chatId) => {
   try {
     const app = getFirebaseApp();
@@ -118,7 +118,7 @@ export const deleteChatForCurrentUser = async (userId, chatId) => {
   }
 };
 
-// ❌ Not safe: This deletes messages — use only for account cleanup
+// Delete entire chat and messages (used only for account cleanup)
 export const deleteEntireChatForUser = async (userId, chatId) => {
   try {
     const app = getFirebaseApp();
@@ -139,7 +139,7 @@ export const deleteEntireChatForUser = async (userId, chatId) => {
       }
     }
 
-    // 2. ❌ Dangerous: Delete entire chat messages
+    // 2. Delete entire chat messages
     await remove(child(dbRef, `messages/${chatId}`));
 
     // 3. Remove chat if user was last member
