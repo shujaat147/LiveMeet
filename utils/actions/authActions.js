@@ -72,15 +72,8 @@ export const signIn = (email, password) => {
             }, millisecondsUntilExpiry);
 
         } catch (error) {
-            const errorCode = error.code;
-
-            let message = "Something went wrong.";
-
-            if (errorCode === "auth/wrong-password" || errorCode === "auth/user-not-found") {
-                message = "The username or password was incorrect";
-            }
-
-            throw new Error(message);
+            console.log(error)
+            throw error;
         }
     }
 }
@@ -89,7 +82,7 @@ export const userLogout = (userData) => {
     return async dispatch => {
 
         try {
-            await removePushToken(userData);   
+            await removePushToken(userData);
         } catch (error) {
             console.log(error)
         }
@@ -101,20 +94,20 @@ export const userLogout = (userData) => {
 }
 
 export const updateSignedInUserData = async (userId, newData) => {
-  if (newData.firstName && newData.lastName) {
-    const firstLast = `${newData.firstName} ${newData.lastName}`.toLowerCase();
-    newData.firstLast = firstLast;
-  }
+    if (newData.firstName && newData.lastName) {
+        const firstLast = `${newData.firstName} ${newData.lastName}`.toLowerCase();
+        newData.firstLast = firstLast;
+    }
 
-  // Ensure null is stored instead of deleted
-  const dataToUpdate = { ...newData };
-  if (!('preferredLanguage' in dataToUpdate)) {
-    dataToUpdate.preferredLanguage = null;
-  }
+    // Ensure null is stored instead of deleted
+    const dataToUpdate = { ...newData };
+    if (!('preferredLanguage' in dataToUpdate)) {
+        dataToUpdate.preferredLanguage = null;
+    }
 
-  const dbRef = ref(getDatabase());
-  const childRef = child(dbRef, `users/${userId}`);
-  await update(childRef, dataToUpdate);
+    const dbRef = ref(getDatabase());
+    const childRef = child(dbRef, `users/${userId}`);
+    await update(childRef, dataToUpdate);
 };
 
 const createUser = async (firstName, lastName, email, userId) => {
@@ -147,28 +140,46 @@ const storePushToken = async (userData) => {
         return;
     }
 
-    const token = (await Notifications.getExpoPushTokenAsync()).data;
+    try {
+        // Request permission first
+        const { status: existingStatus } = await Notifications.getPermissionsAsync();
+        let finalStatus = existingStatus;
 
-    const tokenData = { ...userData.pushTokens } || {};
-    const tokenArray = Object.values(tokenData);
+        if (existingStatus !== 'granted') {
+            const { status } = await Notifications.requestPermissionsAsync();
+            finalStatus = status;
+        }
 
-    if (tokenArray.includes(token)) {
-        return;
+        if (finalStatus !== 'granted') {
+            throw new Error('Notification permission not granted');
+        }
+
+        const token = (await Notifications.getExpoPushTokenAsync()).data;
+
+        const tokenData = { ...userData.pushTokens } || {};
+        const tokenArray = Object.values(tokenData);
+
+        if (tokenArray.includes(token)) {
+            return;
+        }
+
+        tokenArray.push(token);
+
+        for (let i = 0; i < tokenArray.length; i++) {
+            const tok = tokenArray[i];
+            tokenData[i] = tok;
+        }
+
+        const app = getFirebaseApp();
+        const dbRef = ref(getDatabase(app));
+        const userRef = child(dbRef, `users/${userData.userId}/pushTokens`);
+
+        await set(userRef, tokenData);
+    } catch (err) {
+        console.log('Push token registration failed:', err.message);
     }
+};
 
-    tokenArray.push(token);
-
-    for (let i = 0; i < tokenArray.length; i++) {
-        const tok = tokenArray[i];
-        tokenData[i] = tok;
-    }
-
-    const app = getFirebaseApp();
-    const dbRef = ref(getDatabase(app));
-    const userRef = child(dbRef, `users/${userData.userId}/pushTokens`);
-
-    await set(userRef, tokenData);
-}
 
 const removePushToken = async (userData) => {
     if (!Device.isDevice) {
@@ -179,7 +190,7 @@ const removePushToken = async (userData) => {
 
     const tokenData = await getUserPushTokens(userData.userId);
 
-    for(const key in tokenData) {
+    for (const key in tokenData) {
         if (tokenData[key] === token) {
             delete tokenData[key];
             break;

@@ -54,11 +54,20 @@ const SignInForm = props => {
             await dispatch(action);
         } catch (error) {
             console.log("SIGN-IN ERROR CODE:", error.code);
-            console.log("SIGN-IN ERROR MESSAGE:", error.message);
 
-            setError(error.message);
+            let message = "Something went wrong. Please try again.";
+
+            if (error.code === "auth/invalid-login-credentials") {
+                message = "The email or password is incorrect.";
+            } else if (error.code === "auth/invalid-email") {
+                message = "Invalid email format.";
+            }
+
+            setError(message);
             setIsLoading(false);
         }
+
+
     }, [dispatch, formState]);
 
     return (

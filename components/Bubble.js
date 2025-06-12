@@ -9,6 +9,8 @@ import { starMessage } from '../utils/actions/chatActions';
 import { useDispatch, useSelector } from 'react-redux';
 import { hideMessage } from '../store/messagesSlice';
 import { Audio } from 'expo-av';
+import { TouchableOpacity } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 
 function formatAmPm(dateString) {
     const date = new Date(dateString);
@@ -184,7 +186,6 @@ const Bubble = props => {
                             <Image source={{ uri: imageUrl }} style={styles.image} />
                         </TouchableWithoutFeedback>
                     )}
-
                     {dateString && type !== "info" && (
                         <View style={styles.timeContainer}>
                             {isStarred && (

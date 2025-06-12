@@ -24,7 +24,7 @@ import DataListScreen from "../screens/DataListScreen";
 import VoiceCallScreen from "../screens/VoiceCallScreen";
 import { StackActions, useNavigation } from '@react-navigation/native';
 import IncomingCallScreen from '../screens/IncomingCallScreen';
-
+import FullScreenImageScreen from "../screens/FullScreenImageScreen";
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -125,6 +125,14 @@ const StackNavigator = () => {
           component={NewChatScreen}
         />
       </Stack.Group>
+      <Stack.Screen
+        name="FullScreenImage"
+        component={FullScreenImageScreen}
+        options={{
+          headerShown: false,
+          presentation: 'transparentModal',
+        }}
+      />
     </Stack.Navigator>
   )
 }
