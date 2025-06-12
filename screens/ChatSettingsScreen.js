@@ -25,32 +25,31 @@ const ChatSettingsScreen = props => {
 
     const initialState = {
         inputValues: { chatName: chatData.chatName },
-        inputValidities: { chatName: undefined},
+        inputValidities: { chatName: undefined },
         formIsValid: false
     }
 
     const [formState, dispatchFormState] = useReducer(reducer, initialState);
 
     const selectedUsers = props.route.params && props.route.params.selectedUsers;
+
     useEffect(() => {
-        if (!selectedUsers) {
-            return;
-        }
+        if (!selectedUsers) return;
 
-        const selectedUserData = [];
-        selectedUsers.forEach(uid => {
-            if (uid === userData.userId) return;
+        const run = async () => {
+            const selectedUserData = [];
 
-            if (!storedUsers[uid]) {
-                console.log("No user data found in the data store");
-                return;
-            }
+            selectedUsers.forEach(uid => {
+                if (uid === userData.userId) return;
+                if (!storedUsers[uid]) return;
 
-            selectedUserData.push(storedUsers[uid]);
-        });
+                selectedUserData.push(storedUsers[uid]);
+            });
 
-        addUsersToChat(userData, selectedUserData, chatData);
+            await addUsersToChat(userData, selectedUserData, chatData);
+        };
 
+        run();
     }, [selectedUsers]);
 
     const inputChangedHandler = useCallback((inputId, inputValue) => {
@@ -60,7 +59,7 @@ const ChatSettingsScreen = props => {
 
     const saveHandler = useCallback(async () => {
         const updatedValues = formState.inputValues;
-        
+
         try {
             setIsLoading(true);
             await updateChatData(chatId, userData.userId, updatedValues);
@@ -160,17 +159,17 @@ const ChatSettingsScreen = props => {
 
 
 
-            { showSuccessMessage && <Text>Saved!</Text> }
+            {showSuccessMessage && <Text>Saved!</Text>}
 
             {
                 isLoading ?
-                <ActivityIndicator size={'small'} color={colors.primary} /> :
-                hasChanges() && <SubmitButton
-                    title="Save changes"
-                    color={colors.primary}
-                    onPress={saveHandler}
-                    disabled={!formState.formIsValid}
-                />
+                    <ActivityIndicator size={'small'} color={colors.primary} /> :
+                    hasChanges() && <SubmitButton
+                        title="Save changes"
+                        color={colors.primary}
+                        onPress={saveHandler}
+                        disabled={!formState.formIsValid}
+                    />
             }
 
             <DataItem

@@ -14,7 +14,7 @@ const ContactScreen = props => {
     const [isLoading, setIsLoading] = useState(false);
     const storedUsers = useSelector(state => state.users.storedUsers);
     const userData = useSelector(state => state.auth.userData);
-    const currentUser = storedUsers[props.route.params.uid];
+    const currentUser = props.route.params.userData || storedUsers[props.route.params.uid];
 
     const storedChats = useSelector(state => state.chats.chatsData);
     const [commonChats, setCommonChats] = useState([]);
@@ -32,7 +32,7 @@ const ContactScreen = props => {
         }
 
         getCommonUserChats();
-        
+
     }, [])
 
     const removeFromChat = useCallback(async () => {
@@ -49,6 +49,16 @@ const ContactScreen = props => {
             setIsLoading(false);
         }
     }, [props.navigation, isLoading])
+
+    if (!currentUser) {
+        return (
+            <PageContainer>
+                <Text style={{ textAlign: "center", marginTop: 20 }}>
+                    User data not available.
+                </Text>
+            </PageContainer>
+        );
+    }
 
     return <PageContainer>
         <View style={styles.topContainer}>
@@ -73,13 +83,13 @@ const ContactScreen = props => {
                     commonChats.map(cid => {
                         const chatData = storedChats[cid];
                         return <DataItem
-                               key={cid} 
-                               title={chatData.chatName}
-                               subTitle={chatData.latestMessageText}
-                               type="link"
-                               onPress={() => props.navigation.push("ChatScreen", { chatId: cid })}
-                               image={chatData.chatImage}
-                            />
+                            key={cid}
+                            title={chatData.chatName}
+                            subTitle={chatData.latestMessageText}
+                            type="link"
+                            onPress={() => props.navigation.push("ChatScreen", { chatId: cid })}
+                            image={chatData.chatImage}
+                        />
                     })
                 }
             </>
@@ -89,12 +99,12 @@ const ContactScreen = props => {
             chatData && chatData.isGroupChat &&
             (
                 isLoading ?
-                <ActivityIndicator size='small' color={colors.primary} /> :
-                <SubmitButton
-                    title="Remove from chat"
-                    color={colors.red}
-                    onPress={removeFromChat}
-                />
+                    <ActivityIndicator size='small' color={colors.primary} /> :
+                    <SubmitButton
+                        title="Remove from chat"
+                        color={colors.red}
+                        onPress={removeFromChat}
+                    />
             )
         }
 

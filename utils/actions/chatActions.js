@@ -2,9 +2,9 @@ import { child, get, getDatabase, push, ref, remove, set, update } from "firebas
 import { getFirebaseApp } from "../firebaseHelper";
 import { getUserPushTokens } from "./authActions";
 import { addUserChat, deleteUserChat, getUserChats } from "./userActions";
+import { detectLanguage, translateText } from "../translateHelper";
 
 export const createChat = async (loggedInUserId, chatData) => {
-
     const newChatData = {
         ...chatData,
         chatName: chatData.chatName ?? null,
@@ -12,34 +12,37 @@ export const createChat = async (loggedInUserId, chatData) => {
         updatedBy: loggedInUserId,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
-    };
+    };
 
     const app = getFirebaseApp();
     const dbRef = ref(getDatabase(app));
     const newChat = await push(child(dbRef, 'chats'), newChatData);
 
     const chatUsers = newChatData.users;
-    for (let i = 0; i < chatUsers.length; i++) {
-        const userId = chatUsers[i];
-        await push(child(dbRef, `userChats/${userId}`), newChat.key);
-    }
+
+    // ✅ Run all userChat push operations in parallel
+    await Promise.all(
+        chatUsers.map(userId =>
+            push(child(dbRef, `userChats/${userId}`), newChat.key)
+        )
+    );
 
     return newChat.key;
-}
+};
 
 export const sendTextMessage = async (chatId, senderData, messageText, replyTo, chatUsers) => {
-    await sendMessage(chatId, senderData.userId, messageText, null, replyTo, null);
+    await sendMessage(chatId, senderData, messageText, null, replyTo, null);
 
     const otherUsers = chatUsers.filter(uid => uid !== senderData.userId);
     await sendPushNotificationForUsers(otherUsers, `${senderData.firstName} ${senderData.lastName}`, messageText, chatId);
 }
 
-export const sendInfoMessage = async (chatId, senderId, messageText) => {
-    await sendMessage(chatId, senderId, messageText, null, null, "info");
+export const sendInfoMessage = async (chatId, senderData, messageText) => {
+    await sendMessage(chatId, senderData, messageText, null, null, "info");
 }
 
 export const sendImage = async (chatId, senderData, imageUrl, replyTo, chatUsers) => {
-    await sendMessage(chatId, senderData.userId, 'Image', imageUrl, replyTo, null);
+    await sendMessage(chatId, senderData, 'Image', imageUrl, replyTo, null);
 
     const otherUsers = chatUsers.filter(uid => uid !== senderData.userId);
     await sendPushNotificationForUsers(otherUsers, `${senderData.firstName} ${senderData.lastName}`, `${senderData.firstName} sent an image`, chatId);
@@ -57,38 +60,62 @@ export const updateChatData = async (chatId, userId, chatData) => {
     })
 }
 
-const sendMessage = async (chatId, senderId, messageText, imageUrl, replyTo, type) => {
+const sendMessage = async (chatId, senderData, messageText, imageUrl, replyTo, type) => {
     const app = getFirebaseApp();
-    const dbRef = ref(getDatabase());
+    const db = getDatabase(app);
+    const dbRef = ref(db);
     const messagesRef = child(dbRef, `messages/${chatId}`);
 
+    // 1. Detect language of the message
+    const detectedLang = await detectLanguage(messageText);
+    let translatedText = null;
+
+    // 2. Get chat users to determine recipient
+    const chatSnapshot = await get(child(dbRef, `chats/${chatId}`));
+    const chatUsers = chatSnapshot.val()?.users || [];
+
+    // 3. Determine recipientId (someone other than sender)
+    const recipientId = chatUsers.find(uid => uid !== senderData.userId);
+
+    // 4. Get recipient's language preference
+    let recipientLang = null;
+    if (recipientId) {
+        const recipientSnapshot = await get(child(dbRef, `users/${recipientId}`));
+        recipientLang = recipientSnapshot.val()?.preferredLanguage;
+    }
+
+    // 5. Perform translation only if needed
+    if (
+        recipientLang &&
+        recipientLang !== "no_translation" &&
+        recipientLang !== detectedLang
+    ) {
+        translatedText = await translateText(messageText, recipientLang);
+    }
+
+    // 6. Construct and push the message
     const messageData = {
-        sentBy: senderId,
+        sentBy: senderData.userId,
         sentAt: new Date().toISOString(),
-        text: messageText
+        text: messageText,
+        language: detectedLang,
     };
 
-    if (replyTo) {
-        messageData.replyTo = replyTo;
-    }
-
-    if (imageUrl) {
-        messageData.imageUrl = imageUrl;
-    }
-
-    if (type) {
-        messageData.type = type;
-    }
+    if (replyTo) messageData.replyTo = replyTo;
+    if (imageUrl) messageData.imageUrl = imageUrl;
+    if (type) messageData.type = type;
 
     await push(messagesRef, messageData);
 
+    // 7. Update chat metadata
     const chatRef = child(dbRef, `chats/${chatId}`);
     await update(chatRef, {
-        updatedBy: senderId,
+        updatedBy: senderData.userId,
         updatedAt: new Date().toISOString(),
         latestMessageText: messageText
     });
-}
+};
+
 
 export const starMessage = async (messageId, chatId, userId) => {
     try {
@@ -113,7 +140,7 @@ export const starMessage = async (messageId, chatId, userId) => {
             await set(childRef, starredMessageData);
         }
     } catch (error) {
-        console.log(error);        
+        console.log(error);
     }
 }
 
@@ -137,38 +164,39 @@ export const removeUserFromChat = async (userLoggedInData, userToRemoveData, cha
         `${userLoggedInData.firstName} left the chat` :
         `${userLoggedInData.firstName} removed ${userToRemoveData.firstName} from the chat`;
 
-    await sendInfoMessage(chatData.key, userLoggedInData.userId, messageText);
+    await sendInfoMessage(chatData.key, userLoggedInData, messageText);
 }
 
 export const addUsersToChat = async (userLoggedInData, usersToAddData, chatData) => {
     const existingUsers = Object.values(chatData.users);
     const newUsers = [];
 
-    let userAddedName = "";
+    let userAddedNames = [];
 
-    usersToAddData.forEach(async userToAdd => {
+    for (const userToAdd of usersToAddData) {
         const userToAddId = userToAdd.userId;
 
-        if (existingUsers.includes(userToAddId)) return;
+        if (existingUsers.includes(userToAddId)) continue;
 
         newUsers.push(userToAddId);
+        userAddedNames.push(`${userToAdd.firstName} ${userToAdd.lastName}`);
 
         await addUserChat(userToAddId, chatData.key);
-
-        userAddedName = `${userToAdd.firstName} ${userToAdd.lastName}`;
-    });
+    }
 
     if (newUsers.length === 0) {
         return;
     }
 
-    await updateChatData(chatData.key, userLoggedInData.userId, { users: existingUsers.concat(newUsers) })
+    await updateChatData(chatData.key, userLoggedInData.userId, {
+        users: existingUsers.concat(newUsers)
+    });
 
-    const moreUsersMessage = newUsers.length > 1 ? `and ${newUsers.length - 1} others ` : '';
-    const messageText = `${userLoggedInData.firstName} ${userLoggedInData.lastName} added ${userAddedName} ${moreUsersMessage}to the chat`;
-    await sendInfoMessage(chatData.key, userLoggedInData.userId, messageText);
+    const addedNamesStr = userAddedNames.join(", ");
+    const messageText = `${userLoggedInData.firstName} ${userLoggedInData.lastName} added ${addedNamesStr} to the chat`;
 
-}
+    await sendInfoMessage(chatData.key, userLoggedInData, messageText);
+};
 
 export const logCallMessage = async (chatId, senderId, statusText, status) => {
     const app = getFirebaseApp();
@@ -199,7 +227,7 @@ const sendPushNotificationForUsers = (chatUsers, title, body, chatId) => {
         console.log("test");
         const tokens = await getUserPushTokens(uid);
 
-        for(const key in tokens) {
+        for (const key in tokens) {
             const token = tokens[key];
 
             await fetch("https://exp.host/--/api/v2/push/send", {

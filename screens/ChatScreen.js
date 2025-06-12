@@ -30,14 +30,14 @@ import { initiateCall } from "../utils/actions/callActions";
 import { FontAwesome } from "@expo/vector-icons";
 import { Audio } from "expo-av";
 import { startRecording, stopRecordingAndUpload } from "../utils/audioHelper"; // You’ll create this file
-import { getDatabase, ref, push, set } from "firebase/database";
+import { get, getDatabase, ref, push, set } from "firebase/database";
 import { useMemo } from "react";
+import { translateText } from "../utils/translateHelper";
 
 
 const ChatScreen = (props) => {
-  const [chatUsers, setChatUsers] = useState([]);
   const [messageText, setMessageText] = useState("");
-  const [chatId, setChatId] = useState(props.route?.params?.chatId);
+  const [chatId, setChatId] = useState(props.route?.params?.chatId || null);
   const [errorBannerText, setErrorBannerText] = useState("");
   const [replyingTo, setReplyingTo] = useState();
   const [tempImageUri, setTempImageUri] = useState("");
@@ -52,8 +52,12 @@ const ChatScreen = (props) => {
   const userData = useSelector(state => state.auth.userData);
   const storedUsers = useSelector(state => state.users.storedUsers);
   const storedChats = useSelector(state => state.chats.chatsData);
+  const [translatedMessages, setTranslatedMessages] = useState([]);
+  const fallbackChatData = props.route?.params?.newChatData;
 
-  const chatMessagesRaw = useSelector(state => state.messages.messagesData[chatId] || {});
+  const chatMessagesRaw = useSelector(
+    useCallback(state => state.messages.messagesData[chatId] || {}, [chatId])
+  );
 
   const chatMessages = useMemo(() => {
     return Object.keys(chatMessagesRaw).map(key => ({
@@ -62,63 +66,127 @@ const ChatScreen = (props) => {
     }));
   }, [chatMessagesRaw]);
 
-  const chatData = (chatId && storedChats[chatId]) || props.route?.params?.newChatData || {};
+  const chatData = useMemo(() => {
+    return (chatId && storedChats[chatId]) || props.route?.params?.newChatData || null;
+  }, [chatId, storedChats, props.route?.params?.newChatData]);
+
+  const [chatUsers, setChatUsers] = useState([]);
+
+
+  console.log("[ChatScreen] route.params:", props.route?.params);
+  console.log("[ChatScreen] chatId:", props.route?.params?.chatId);
+  console.log("[ChatScreen] newChatData:", props.route?.params?.newChatData);
+  console.log("[ChatScreen] computed chatData:", chatData);
+  console.log("[ChatScreen] chatUsers state:", chatUsers);
+
+  useEffect(() => {
+    const routeUsers = props.route?.params?.newChatData?.users;
+    const fallbackUsers = chatData?.users;
+
+    const resolvedUsers = routeUsers || fallbackUsers;
+
+    if (Array.isArray(resolvedUsers) && resolvedUsers.length > 0) {
+      console.log("[ChatScreen] Updating chatUsers from route/chatData:", resolvedUsers);
+      setChatUsers(resolvedUsers);
+    } else {
+      console.warn("[ChatScreen] Failed to resolve chat users", { routeUsers, fallbackUsers });
+    }
+  }, [props.route, chatData]);
+
+
+
+
+  // Automatically find chatId if only newChatData is passed
+  useEffect(() => {
+    if (!chatId && fallbackChatData?.users?.length) {
+      const newUsersSet = new Set(fallbackChatData.users);
+      const existingChat = Object.entries(storedChats).find(([id, chat]) => {
+        return (
+          chat.users.length === fallbackChatData.users.length &&
+          chat.users.every(userId => newUsersSet.has(userId))
+        );
+      });
+
+      if (existingChat) {
+        console.log("Found existing chat from newChatData, setting chatId:", existingChat[0]);
+        setChatId(existingChat[0]);
+      }
+    }
+  }, [chatId, fallbackChatData, storedChats]);
+
+
 
   const getChatTitleFromName = () => {
+    if (!Array.isArray(chatUsers)) return "Chat";
+
     const otherUserId = chatUsers.find(uid => uid !== userData.userId);
-    const otherUserData = storedUsers[otherUserId];
-    return otherUserData && `${otherUserData.firstName} ${otherUserData.lastName}`;
+    const otherUserData = storedUsers?.[otherUserId];
+
+    if (!otherUserData) {
+      console.warn("[ChatScreen] Missing user data for:", otherUserId);
+      return "Chat";
+    }
+
+    return `${otherUserData.firstName} ${otherUserData.lastName}`;
   };
+
+
+  useEffect(() => {
+    const translateMessages = async () => {
+      const preferredLang = userData?.preferredLanguage;
+
+      // Always map messages, even if no translation
+      const updated = await Promise.all(
+        chatMessages.map(async (msg) => {
+          // Don't translate if it's own message or already in correct lang
+          if (
+            preferredLang &&
+            preferredLang !== "no_translation" &&
+            msg.sentBy !== userData.userId &&
+            msg.language &&
+            msg.language !== preferredLang &&
+            !msg.translatedText
+          ) {
+            const translated = await translateText(msg.text, preferredLang);
+            return { ...msg, translatedText: translated };
+          }
+          return msg; // Return original message
+        })
+      );
+
+      setTranslatedMessages(updated);
+    };
+
+    translateMessages();
+  }, [chatMessages, userData?.preferredLanguage]);
+
 
   useEffect(() => {
     if (!chatData) return;
 
     props.navigation.setOptions({
       headerTitle: chatData.chatName ?? getChatTitleFromName(),
-      headerRight: () => (
-        <HeaderButtons HeaderButtonComponent={CustomHeaderButton}>
-          {chatId && (
-            <>
-              <Item
-                title="Voice Call"
-                iconName="call-outline"
-                onPress={async () => {
-                  const otherUserId = chatUsers.find(uid => uid !== userData.userId);
-                  const otherUserData = storedUsers[otherUserId];
-
-                  await initiateCall({
-                    chatId,
-                    callerId: userData.userId,
-                    receiverId: otherUserId
-                  });
-
-                  props.navigation.navigate("VoiceCall", {
-                    chatId,
-                    callerData: userData,
-                    receiverData: otherUserData,
-                    isCaller: true
-                  });
-                }}
-              />
-              <Item
-                title="Chat settings"
-                iconName="settings-outline"
-                onPress={() =>
-                  chatData.isGroupChat
-                    ? props.navigation.navigate("ChatSettings", { chatId })
-                    : props.navigation.navigate("Contact", {
-                      uid: chatUsers.find(uid => uid !== userData.userId),
-                    })
-                }
-              />
-            </>
-          )}
-        </HeaderButtons>
-      ),
+      headerRight: renderHeaderRight,
     });
 
-    setChatUsers(chatData.users);
-  }, [chatUsers]);
+    if (!chatUsers || chatUsers.length === 0) {
+      const usersFromRoute = props.route.params?.newChatData?.users;
+      const fallbackUsers = chatData?.users;
+
+      const resolvedUsers = usersFromRoute || fallbackUsers || [];
+
+      if (resolvedUsers.length) {
+        console.log("[ChatScreen] Resolved initial chat users:", resolvedUsers);
+        setChatUsers(resolvedUsers);
+      } else {
+        console.warn("[ChatScreen] Unable to resolve users for chat");
+      }
+    }
+    if (!chatData.users || !Array.isArray(chatData.users)) {
+      console.warn("[ChatScreen] chatData.users is invalid:", chatData.users);
+    }
+    console.log("[ChatScreen] Setting chat users from chatData:", chatData.users);
+  }, [chatData]);
 
   const sendMessage = useCallback(async () => {
     if (isSending || messageText.trim() === "") return;
@@ -126,12 +194,41 @@ const ChatScreen = (props) => {
     setIsSending(true);
     try {
       let id = chatId;
+      let updatedChatUsers = chatUsers;
+      const db = getDatabase();
+
       if (!id) {
         id = await createChat(userData.userId, props.route.params.newChatData);
         setChatId(id);
+
+        // 🆕 Skip Firebase .get() — directly use what you already know
+        const newChat = {
+          ...props.route.params.newChatData,
+          createdBy: userData.userId,
+          createdAt: new Date().toISOString(),
+          key: id
+        };
+
+        dispatch({
+          type: "chats/setChatsData",
+          payload: {
+            chatsData: {
+              ...storedChats,
+              [id]: newChat
+            }
+          }
+        });
+
+        updatedChatUsers = newChat.users || [];
+        setChatUsers(updatedChatUsers);
+        
+        if (!updatedChatUsers || updatedChatUsers.length < 2) {
+          throw new Error("Group members not loaded yet.");
+        }
       }
 
-      await sendTextMessage(id, userData, messageText, replyingTo?.key, chatUsers);
+      // ✅ Use updatedChatUsers + id directly
+      await sendTextMessage(id, userData, messageText, replyingTo?.key, updatedChatUsers);
       setMessageText("");
       setReplyingTo(null);
     } catch (error) {
@@ -141,7 +238,8 @@ const ChatScreen = (props) => {
     } finally {
       setIsSending(false);
     }
-  }, [messageText, chatId, isSending]);
+  }, [messageText, chatId, isSending, chatUsers, storedChats, storedUsers, userData, replyingTo]);
+
 
   const handleVoiceRecording = async () => {
     if (!isRecording) {
@@ -223,9 +321,97 @@ const ChatScreen = (props) => {
     [chatId, userData, replyingTo, chatUsers]
   );
 
+  useEffect(() => {
+    if (!chatData || !chatUsers?.length) return;
+
+    const otherUserId = chatUsers.find(uid => uid !== userData.userId);
+    const otherUserData = storedUsers[otherUserId];
+
+    if (otherUserData) {
+      console.log("[ChatScreen] Setting header - chatId:", chatId);
+      console.log("[ChatScreen] chatUsers:", chatUsers);
+      console.log("[ChatScreen] storedUsers:", storedUsers);
+
+      props.navigation.setOptions({
+        headerTitle: chatData.chatName ?? `${otherUserData.firstName} ${otherUserData.lastName}`,
+        headerRight: renderHeaderRight,
+      });
+    }
+  }, [chatData, chatUsers, storedUsers]);
+
   const handleImagePress = (imageUrl) => {
     props.navigation.navigate('FullScreenImage', { imageUrl });
   };
+
+  if (!chatData || !chatData.users || chatData.users.length === 0) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  const renderHeaderRight = () => {
+    if (!Array.isArray(chatUsers) || chatUsers.length < 2) {
+      console.warn("[ChatScreen] chatUsers is invalid or incomplete:", chatUsers);
+      return null;
+    }
+
+    const otherUserId = chatUsers.find(uid => uid !== userData.userId);
+    const otherUserData = storedUsers[otherUserId];
+
+    return (
+      <HeaderButtons HeaderButtonComponent={CustomHeaderButton}>
+        <Item
+          title="Voice Call"
+          iconName="call-outline"
+          onPress={async () => {
+            await initiateCall({
+              chatId,
+              callerId: userData.userId,
+              receiverId: otherUserId,
+            });
+
+            props.navigation.navigate("VoiceCall", {
+              chatId,
+              callerData: userData,
+              receiverData: otherUserData,
+              isCaller: true,
+            });
+          }}
+        />
+        <Item
+          title="Chat settings"
+          iconName="settings-outline"
+          onPress={() => {
+            if (chatData?.isGroupChat) {
+              // Navigate to group settings screen
+              props.navigation.navigate("ChatSettings", {
+                chatId,
+                chatData,
+                chatUsers,
+              });
+            } else {
+              const otherUserId = chatUsers.find(uid => uid !== userData.userId);
+              const otherUserData = storedUsers[otherUserId];
+
+              if (!otherUserData) {
+                console.warn("[ChatScreen] Missing user data for:", otherUserId);
+                return;
+              }
+
+              props.navigation.navigate("Contact", {
+                uid: otherUserId,
+                userData: otherUserData,
+                chatId,
+              });
+            }
+          }}
+        />
+      </HeaderButtons>
+    );
+  };
+
 
   return (
     <SafeAreaView edges={["right", "left", "bottom"]} style={styles.container}>
@@ -244,7 +430,7 @@ const ChatScreen = (props) => {
                 ref={(ref) => (flatList.current = ref)}
                 onContentSizeChange={() => flatList.current.scrollToEnd({ animated: false })}
                 onLayout={() => flatList.current.scrollToEnd({ animated: false })}
-                data={chatMessages}
+                data={translatedMessages}
                 renderItem={(itemData) => {
                   const message = itemData.item;
                   const isOwnMessage = message.sentBy === userData.userId;
@@ -268,9 +454,10 @@ const ChatScreen = (props) => {
                       date={message.sentAt}
                       name={!chatData.isGroupChat || isOwnMessage ? undefined : name}
                       setReply={() => setReplyingTo(message)}
-                      replyingTo={message.replyTo && chatMessages.find(i => i.key === message.replyTo)}
+                      replyingTo={message.replyTo && translatedMessages.find(i => i.key === message.replyTo)}
                       imageUrl={message.imageUrl}
                       onImagePress={handleImagePress}
+                      translatedText={message.translatedText}
                     />
                   );
                 }}
@@ -296,7 +483,11 @@ const ChatScreen = (props) => {
             style={styles.textbox}
             value={messageText}
             onChangeText={setMessageText}
-            onSubmitEditing={sendMessage}
+            onSubmitEditing={() => {
+              if (!isSending && chatId && chatUsers.length > 0) {
+                sendMessage();
+              }
+            }}
           />
 
           {messageText === "" ? (
@@ -396,3 +587,6 @@ const styles = StyleSheet.create({
 });
 
 export default ChatScreen;
+
+
+

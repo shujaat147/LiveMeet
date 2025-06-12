@@ -9,8 +9,6 @@ import { starMessage } from '../utils/actions/chatActions';
 import { useDispatch, useSelector } from 'react-redux';
 import { hideMessage } from '../store/messagesSlice';
 import { Audio } from 'expo-av';
-import { TouchableOpacity } from "react-native";
-import { useNavigation } from "@react-navigation/native";
 
 function formatAmPm(dateString) {
     const date = new Date(dateString);
@@ -35,7 +33,7 @@ const MenuItem = props => {
 };
 
 const Bubble = props => {
-    const { text, type, messageId, chatId, userId, date, setReply, replyingTo, name, imageUrl, audioUrl, onImagePress } = props;
+    const { text, type, messageId, chatId, userId, date, setReply, replyingTo, name, imageUrl, audioUrl, onImagePress, translatedText } = props;
 
     const dispatch = useDispatch();
     const starredMessages = useSelector(state => state.messages.starredMessages[chatId]) || {};
@@ -143,6 +141,14 @@ const Bubble = props => {
     const isStarred = isUserMessage && starredMessages[messageId] !== undefined;
     const replyingToUser = replyingTo && storedUsers[replyingTo.sentBy];
 
+    if (type === "info") {
+        return (
+            <View style={styles.infoMessageWrapper}>
+                <Text style={styles.infoMessageText}>{text}</Text>
+            </View>
+        );
+    }
+
     return (
         <View style={wrapperStyle}>
             <Container onLongPress={() => menuRef.current?.props?.ctx?.menuActions?.openMenu(id.current)} style={{ width: '100%' }}>
@@ -178,7 +184,14 @@ const Bubble = props => {
 
 
                     {!audioUrl && !imageUrl && (
-                        <Text style={textStyle}>{text}</Text>
+                        <View>
+                            <Text style={textStyle}>{text}</Text>
+                            {translatedText && (
+                                <Text style={[textStyle, { fontStyle: 'italic', color: 'gray', marginTop: 4 }]}>
+                                    {translatedText}
+                                </Text>
+                            )}
+                        </View>
                     )}
 
                     {imageUrl && (
@@ -255,7 +268,23 @@ const styles = StyleSheet.create({
         width: 300,
         height: 300,
         marginBottom: 5
-    }
+    },
+    infoMessageWrapper: {
+        marginVertical: 10,
+        paddingHorizontal: 16,
+        paddingVertical: 6,
+        alignItems: 'center',
+        backgroundColor: '#f0f0f0',
+        borderRadius: 10,
+        alignSelf: 'center',
+        maxWidth: '100%',
+    },
+    infoMessageText: {
+        fontStyle: 'italic',
+        fontSize: 13,
+        color: '#444',
+        textAlign: 'center',
+    },
 });
 
 export default Bubble;
