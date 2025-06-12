@@ -58,3 +58,10 @@ firebase-debug.log
 
 # Logs
 *.log
+
+# Metro bundler cache
+.expo/cache/
+metro-cache/
+
+# Babel cache
+babel.config.js
