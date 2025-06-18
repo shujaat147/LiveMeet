@@ -34,6 +34,7 @@
     "react-native": "0.76.9",
     "react-native-agora": "^4.5.2",
     "react-native-awesome-alerts": "^2.0.0",
+    "react-native-compressor": "^1.11.0",
     "react-native-gesture-handler": "~2.20.2",
     "react-native-paper": "^5.10.1",
     "react-native-popup-menu": "^0.16.0",

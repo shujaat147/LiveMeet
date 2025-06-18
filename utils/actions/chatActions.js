@@ -41,12 +41,40 @@ export const sendInfoMessage = async (chatId, senderData, messageText) => {
     await sendMessage(chatId, senderData, messageText, null, null, "info");
 }
 
-export const sendImage = async (chatId, senderData, imageUrl, replyTo, chatUsers) => {
-    await sendMessage(chatId, senderData, 'Image', imageUrl, replyTo, null);
+export const sendImage = async (
+    chatId,
+    senderData,
+    imageUrl,
+    replyTo,
+    chatUsers,
+    translatedTextFromImage = null,
+    ocrTextFromImage = null // <-- add this
+) => {
+    const db = getDatabase();
+    const messagesRef = ref(db, `messages/${chatId}`);
 
-    const otherUsers = chatUsers.filter(uid => uid !== senderData.userId);
-    await sendPushNotificationForUsers(otherUsers, `${senderData.firstName} ${senderData.lastName}`, `${senderData.firstName} sent an image`, chatId);
-}
+    const newMessage = push(messagesRef); // Get a new message key
+
+    const messageData = {
+        sentBy: senderData.userId,
+        sentAt: new Date().toISOString(),
+        imageUrl: imageUrl,
+        type: "image",
+        translatedTextFromImage: translatedTextFromImage || null,
+        ocrTextFromImage: ocrTextFromImage || null, // ✅ store original OCR text
+    };
+
+    if (replyTo) messageData.replyTo = replyTo;
+
+    await set(newMessage, messageData);
+
+    // ✅ Update latest message in chat
+    await update(ref(db, `chats/${chatId}`), {
+        latestMessageText: "Image",
+        updatedAt: new Date().toISOString(),
+        updatedBy: senderData.userId,
+    });
+};
 
 export const updateChatData = async (chatId, userId, chatData) => {
     const app = getFirebaseApp();
@@ -60,7 +88,7 @@ export const updateChatData = async (chatId, userId, chatData) => {
     })
 }
 
-const sendMessage = async (chatId, senderData, messageText, imageUrl, replyTo, type) => {
+const sendMessage = async (chatId, senderData, messageText, imageUrl, replyTo, type, originalImageText = null) => {
     const app = getFirebaseApp();
     const db = getDatabase(app);
     const dbRef = ref(db);
@@ -99,6 +127,8 @@ const sendMessage = async (chatId, senderData, messageText, imageUrl, replyTo, t
         sentAt: new Date().toISOString(),
         text: messageText,
         language: detectedLang,
+        translatedText: translatedText,
+        originalImageText: originalImageText,
     };
 
     if (replyTo) messageData.replyTo = replyTo;
@@ -245,3 +275,7 @@ const sendPushNotificationForUsers = (chatUsers, title, body, chatId) => {
         }
     })
 }
+
+
+
+

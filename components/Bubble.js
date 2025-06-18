@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Image, StyleSheet, Text, TouchableWithoutFeedback, View } from 'react-native';
+import { Image, StyleSheet, Text, TouchableWithoutFeedback, View, TouchableOpacity } from 'react-native';
 import colors from '../constants/colors';
 import { Menu, MenuTrigger, MenuOptions, MenuOption } from 'react-native-popup-menu';
 import uuid from 'react-native-uuid';
@@ -33,7 +33,7 @@ const MenuItem = props => {
 };
 
 const Bubble = props => {
-    const { text, type, messageId, chatId, userId, date, setReply, replyingTo, name, imageUrl, audioUrl, onImagePress, translatedText } = props;
+    const { text, type, messageId, chatId, userId, date, setReply, replyingTo, name, imageUrl, audioUrl, onImagePress, translatedText, translatedTextFromImage } = props;
 
     const dispatch = useDispatch();
     const starredMessages = useSelector(state => state.messages.starredMessages[chatId]) || {};
@@ -186,19 +186,30 @@ const Bubble = props => {
                     {!audioUrl && !imageUrl && (
                         <View>
                             <Text style={textStyle}>{text}</Text>
+                        </View>
+                    )}
+
+                    {imageUrl && (
+                        <TouchableOpacity onPress={() => onImagePress(imageUrl)}>
+                            <Image source={{ uri: imageUrl }} style={styles.image} />
+                        </TouchableOpacity>
+                    )}
+
+                    {type !== "myMessage" && (
+                        <>
                             {translatedText && (
                                 <Text style={[textStyle, { fontStyle: 'italic', color: 'gray', marginTop: 4 }]}>
                                     {translatedText}
                                 </Text>
                             )}
-                        </View>
+                            {translatedTextFromImage && (
+                                <Text style={styles.translatedText}>
+                                    {translatedTextFromImage}
+                                </Text>
+                            )}
+                        </>
                     )}
 
-                    {imageUrl && (
-                        <TouchableWithoutFeedback onPress={() => onImagePress?.(imageUrl)}>
-                            <Image source={{ uri: imageUrl }} style={styles.image} />
-                        </TouchableWithoutFeedback>
-                    )}
                     {dateString && type !== "info" && (
                         <View style={styles.timeContainer}>
                             {isStarred && (

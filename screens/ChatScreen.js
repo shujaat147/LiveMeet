@@ -33,7 +33,7 @@ import { startRecording, stopRecordingAndUpload } from "../utils/audioHelper"; /
 import { get, getDatabase, ref, push, set } from "firebase/database";
 import { useMemo } from "react";
 import { translateText } from "../utils/translateHelper";
-
+import { performOCR } from "../utils/imagePickerHelper"
 
 const ChatScreen = (props) => {
   const [messageText, setMessageText] = useState("");
@@ -54,6 +54,7 @@ const ChatScreen = (props) => {
   const storedChats = useSelector(state => state.chats.chatsData);
   const [translatedMessages, setTranslatedMessages] = useState([]);
   const fallbackChatData = props.route?.params?.newChatData;
+  const translationCache = useRef({});
 
   const chatMessagesRaw = useSelector(
     useCallback(state => state.messages.messagesData[chatId] || {}, [chatId])
@@ -135,22 +136,42 @@ const ChatScreen = (props) => {
     const translateMessages = async () => {
       const preferredLang = userData?.preferredLanguage;
 
-      // Always map messages, even if no translation
       const updated = await Promise.all(
         chatMessages.map(async (msg) => {
-          // Don't translate if it's own message or already in correct lang
+          const updatedMsg = { ...msg };
+
+          // 🧠 Skip own messages
+          if (msg.sentBy === userData.userId) {
+            updatedMsg.translatedText = null;
+            updatedMsg.translatedTextFromImage = null;
+            return updatedMsg;
+          }
+
+          // TEXT translation
           if (
             preferredLang &&
             preferredLang !== "no_translation" &&
-            msg.sentBy !== userData.userId &&
+            msg.text &&
             msg.language &&
-            msg.language !== preferredLang &&
-            !msg.translatedText
+            msg.language !== preferredLang
           ) {
-            const translated = await translateText(msg.text, preferredLang);
-            return { ...msg, translatedText: translated };
+            updatedMsg.translatedText = await translateText(msg.text, preferredLang);
+          } else {
+            updatedMsg.translatedText = null;
           }
-          return msg; // Return original message
+
+          // IMAGE OCR translation
+          if (
+            preferredLang &&
+            preferredLang !== "no_translation" &&
+            msg.ocrTextFromImage
+          ) {
+            updatedMsg.translatedTextFromImage = await translateText(msg.ocrTextFromImage, preferredLang);
+          } else {
+            updatedMsg.translatedTextFromImage = null;
+          }
+
+          return updatedMsg;
         })
       );
 
@@ -159,7 +180,6 @@ const ChatScreen = (props) => {
 
     translateMessages();
   }, [chatMessages, userData?.preferredLanguage]);
-
 
   useEffect(() => {
     if (!chatData) return;
@@ -221,7 +241,7 @@ const ChatScreen = (props) => {
 
         updatedChatUsers = newChat.users || [];
         setChatUsers(updatedChatUsers);
-        
+
         if (!updatedChatUsers || updatedChatUsers.length < 2) {
           throw new Error("Group members not loaded yet.");
         }
@@ -300,26 +320,67 @@ const ChatScreen = (props) => {
     }
   }, []);
 
-  const uploadImage = useCallback(
-    async (uri) => {
-      setIsLoading(true);
-      try {
-        let id = chatId;
-        if (!id) {
-          id = await createChat(userData.userId, props.route.params.newChatData);
-          setChatId(id);
-        }
-
-        const uploadUrl = await uploadImageAsync(uri, true);
-        await sendImage(id, userData, uploadUrl, replyingTo?.key, chatUsers);
-      } catch (error) {
-        console.log(error);
-      } finally {
-        setIsLoading(false);
+  const uploadImage = useCallback(async (uri, translatedTextFromImage = null, ocrTextFromImage = null) => {
+    setIsLoading(true);
+    try {
+      let id = chatId;
+      if (!id) {
+        id = await createChat(userData.userId, props.route.params.newChatData);
+        setChatId(id);
       }
-    },
+
+      const uploadUrl = await uploadImageAsync(uri, true);
+      await sendImage(chatId, userData, uploadUrl, replyingTo, chatUsers, translatedTextFromImage, ocrTextFromImage);
+    } catch (error) {
+      console.log(error);
+    } finally {
+      setIsLoading(false);
+    }
+  },
     [chatId, userData, replyingTo, chatUsers]
   );
+
+  const sendImageWithTranslation = async () => {
+    try {
+      setShowAlert(false);
+      const imageUri = await launchImagePicker();
+      if (!imageUri) return;
+
+      const downloadUrl = await uploadImageAsync(imageUri, true);
+      if (!downloadUrl) throw new Error("Image upload failed.");
+
+      const extractedText = await performOCR(imageUri);
+      let translatedText = null;
+
+      if (extractedText) {
+        const detectedLang = await detectLanguage(extractedText);
+        const recipientId = chatUsers.find(uid => uid !== userData.userId);
+        const recipientSnapshot = await get(
+          child(ref(getDatabase(getFirebaseApp())), `users/${recipientId}`)
+        );
+        const recipientLang = recipientSnapshot.val()?.preferredLanguage;
+
+        if (
+          recipientLang &&
+          recipientLang !== "no_translation" &&
+          recipientLang !== detectedLang
+        ) {
+          translatedText = await translateText(extractedText, recipientLang);
+        }
+      }
+
+      console.log("Sending image with translation:", {
+        imageUri,
+        extractedText,
+        translatedText
+      });
+
+      await sendImage(chatId, userData, downloadUrl, replyingTo, chatUsers, translatedText, extractedText);
+      setReplyingTo(null);
+    } catch (err) {
+      console.error("sendImageWithTranslation failed:", err);
+    }
+  };
 
   useEffect(() => {
     if (!chatData || !chatUsers?.length) return;
@@ -330,7 +391,7 @@ const ChatScreen = (props) => {
     if (otherUserData) {
       console.log("[ChatScreen] Setting header - chatId:", chatId);
       console.log("[ChatScreen] chatUsers:", chatUsers);
-      console.log("[ChatScreen] storedUsers:", storedUsers);
+      //console.log("[ChatScreen] storedUsers:", storedUsers);
 
       props.navigation.setOptions({
         headerTitle: chatData.chatName ?? `${otherUserData.firstName} ${otherUserData.lastName}`,
@@ -458,6 +519,7 @@ const ChatScreen = (props) => {
                       imageUrl={message.imageUrl}
                       onImagePress={handleImagePress}
                       translatedText={message.translatedText}
+                      translatedTextFromImage={message.translatedTextFromImage}
                     />
                   );
                 }}
@@ -516,28 +578,66 @@ const ChatScreen = (props) => {
             title="Send image?"
             closeOnTouchOutside={true}
             closeOnHardwareBackPress={false}
-            showCancelButton={true}
-            showConfirmButton={true}
-            cancelText="Cancel"
-            confirmText="Send image"
-            confirmButtonColor={colors.primary}
-            cancelButtonColor={colors.red}
+            showConfirmButton={false}
+            showCancelButton={false}
             titleStyle={styles.popupTitleStyle}
-            onCancelPressed={() => setTempImageUri("")}
-            onConfirmPressed={async () => {
-              const uri = tempImageUri;
-              setTempImageUri("");
-              await uploadImage(uri);
-            }}
+            onDismiss={() => setTempImageUri("")}
             customView={
-              <View>
+              <View style={{ alignItems: 'center' }}>
                 {isLoading && <ActivityIndicator size="small" color={colors.primary} />}
                 {!isLoading && tempImageUri !== "" && (
-                  <Image source={{ uri: tempImageUri }} style={{ width: 200, height: 200 }} />
+                  <>
+                    <Image source={{ uri: tempImageUri }} style={{ width: 300, height: 300, marginBottom: 10 }} />
+
+                    <TouchableOpacity
+                      onPress={() => setTempImageUri("")}
+                      style={styles.alertButtonRed}
+                    >
+                      <Text style={styles.alertButtonText}>Cancel</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      onPress={async () => {
+                        const uri = tempImageUri;
+                        setTempImageUri("");
+                        await uploadImage(uri); // send without translation
+                      }}
+                      style={styles.alertButtonGray}
+                    >
+                      <Text style={styles.alertButtonText}>Send Image</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      onPress={async () => {
+                        const uri = tempImageUri;
+                        setTempImageUri("");
+
+                        const ocrText = await performOCR(uri);
+                        let translatedText = null;
+
+                        if (ocrText) {
+                          const recipientId = chatUsers.find(uid => uid !== userData.userId);
+                          const db = getDatabase();
+                          const recipientSnap = await get(ref(db, `users/${recipientId}`));
+                          const recipientLang = recipientSnap.val()?.preferredLanguage;
+
+                          if (recipientLang && recipientLang !== "no_translation") {
+                            translatedText = await translateText(ocrText, recipientLang);
+                          }
+                        }
+
+                        await uploadImage(uri, translatedText, ocrText); // both translated and original OCR text
+                      }}
+                      style={styles.alertButtonGreen}
+                    >
+                      <Text style={styles.alertButtonText}>Send with Translation</Text>
+                    </TouchableOpacity>
+                  </>
                 )}
               </View>
             }
           />
+
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -584,9 +684,40 @@ const styles = StyleSheet.create({
     fontFamily: "medium",
     letterSpacing: 0.3,
   },
+  alertButtonRed: {
+    backgroundColor: colors.red,
+    padding: 10,
+    marginTop: 6,
+    borderRadius: 5,
+    width: 200,
+    alignItems: "center",
+  },
+  alertButtonGray: {
+    backgroundColor: "#999",
+    padding: 10,
+    marginTop: 6,
+    borderRadius: 5,
+    width: 200,
+    alignItems: "center",
+  },
+  alertButtonGreen: {
+    backgroundColor: colors.primary,
+    padding: 10,
+    marginTop: 6,
+    borderRadius: 5,
+    width: 200,
+    alignItems: "center",
+  },
+  alertButtonText: {
+    color: "white",
+    fontWeight: "bold",
+  },
 });
 
 export default ChatScreen;
+
+
+
 
 
 

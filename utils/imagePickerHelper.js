@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import { getFirebaseApp } from './firebaseHelper';
 import uuid from 'react-native-uuid';
 import { getDownloadURL, getStorage, ref, uploadBytesResumable } from 'firebase/storage';
+import { Image } from 'react-native-compressor';
 
 export const launchImagePicker = async () => {
   await checkMediaPermissions();
@@ -81,4 +82,58 @@ const checkMediaPermissions = async () => {
   }
 
   return Promise.resolve();
+};
+
+export const performOCR = async (imageUri) => {
+  console.log("Original image URI:", imageUri);
+
+  try {
+    const compressedUri = await Image.compress(imageUri, {
+      compressionMethod: 'auto',
+      maxSize: 0.9, // Target ~900 KB
+    });
+
+    console.log("Compressed URI:", compressedUri);
+
+    const getFileInfo = (uri) => {
+      const fileName = uri.split("/").pop();
+      const match = /\.(\w+)$/.exec(fileName || "");
+      const ext = match?.[1];
+      const type = ext ? `image/${ext === "jpg" ? "jpeg" : ext}` : `image`;
+
+      return { name: fileName || "image", type };
+    };
+
+    const { name, type } = getFileInfo(compressedUri);
+
+    const formData = new FormData();
+    formData.append("file", {
+      uri: compressedUri,
+      name,
+      type,
+    });
+    formData.append("language", "eng");
+    formData.append("isOverlayRequired", "false");
+
+    const response = await fetch("https://api.ocr.space/parse/image", {
+      method: "POST",
+      headers: {
+        apikey: "K83084712288957",
+      },
+      body: formData,
+    });
+
+    const result = await response.json();
+    console.log("OCR raw result:", JSON.stringify(result, null, 2));
+
+    const text = result?.ParsedResults?.[0]?.ParsedText?.trim();
+
+    if (text) return text;
+
+    console.warn("No text found in image.");
+    return null;
+  } catch (err) {
+    console.error("OCR failed:", err);
+    return null;
+  }
 };
