@@ -24,8 +24,16 @@ import Bubble from "../components/Bubble";
 import ReplyTo from "../components/ReplyTo";
 import AwesomeAlert from "react-native-awesome-alerts";
 import CustomHeaderButton from "../components/CustomHeaderButton";
-import { createChat, sendImage, sendTextMessage } from "../utils/actions/chatActions";
-import { launchImagePicker, openCamera, uploadImageAsync } from "../utils/imagePickerHelper";
+import {
+  createChat,
+  sendImage,
+  sendTextMessage,
+} from "../utils/actions/chatActions";
+import {
+  launchImagePicker,
+  openCamera,
+  uploadImageAsync,
+} from "../utils/imagePickerHelper";
 import { initiateCall } from "../utils/actions/callActions";
 import { FontAwesome } from "@expo/vector-icons";
 import { Audio } from "expo-av";
@@ -33,11 +41,42 @@ import { startRecording, stopRecordingAndUpload } from "../utils/audioHelper"; /
 import { get, getDatabase, ref, push, set } from "firebase/database";
 import { useMemo } from "react";
 import { translateText } from "../utils/translateHelper";
-import { performOCR } from "../utils/imagePickerHelper"
+import { performOCR } from "../utils/imagePickerHelper";
+
 
 const ChatScreen = (props) => {
+  
   const [messageText, setMessageText] = useState("");
-  const [chatId, setChatId] = useState(props.route?.params?.chatId || null);
+
+  const passedChatId = props.route?.params?.chatId;
+  const passedUserId = props.route?.params?.userId;
+
+  const userData = useSelector((state) => state.auth.userData);
+  const storedChats = useSelector((state) => state.chats.chatsData);
+
+  const resolvedChatId = useMemo(() => {
+    if (passedChatId) return passedChatId;
+
+    if (passedUserId) {
+      const existingChat = Object.entries(storedChats).find(([_, chat]) =>
+        chat.users.length === 2 && // only 1-1 chat allowed
+        chat.users.includes(userData.userId) &&
+        chat.users.includes(passedUserId)
+      );
+      return existingChat?.[0] ?? null;
+    }
+
+    return null;
+  }, [passedChatId, passedUserId, storedChats]);
+
+  const [chatId, setChatId] = useState(resolvedChatId);
+
+  useEffect(() => {
+    if (resolvedChatId && chatId !== resolvedChatId) {
+      setChatId(resolvedChatId);
+    }
+  }, [resolvedChatId]);
+
   const [errorBannerText, setErrorBannerText] = useState("");
   const [replyingTo, setReplyingTo] = useState();
   const [tempImageUri, setTempImageUri] = useState("");
@@ -49,30 +88,31 @@ const ChatScreen = (props) => {
 
   const flatList = useRef();
 
-  const userData = useSelector(state => state.auth.userData);
-  const storedUsers = useSelector(state => state.users.storedUsers);
-  const storedChats = useSelector(state => state.chats.chatsData);
+  const storedUsers = useSelector((state) => state.users.storedUsers);
   const [translatedMessages, setTranslatedMessages] = useState([]);
   const fallbackChatData = props.route?.params?.newChatData;
   const translationCache = useRef({});
 
   const chatMessagesRaw = useSelector(
-    useCallback(state => state.messages.messagesData[chatId] || {}, [chatId])
+    useCallback((state) => state.messages.messagesData[chatId] || {}, [chatId])
   );
 
   const chatMessages = useMemo(() => {
-    return Object.keys(chatMessagesRaw).map(key => ({
+    return Object.keys(chatMessagesRaw).map((key) => ({
       key,
       ...chatMessagesRaw[key],
     }));
   }, [chatMessagesRaw]);
 
   const chatData = useMemo(() => {
-    return (chatId && storedChats[chatId]) || props.route?.params?.newChatData || null;
+    return (
+      (chatId && storedChats[chatId]) ||
+      props.route?.params?.newChatData ||
+      null
+    );
   }, [chatId, storedChats, props.route?.params?.newChatData]);
 
   const [chatUsers, setChatUsers] = useState([]);
-
 
   console.log("[ChatScreen] route.params:", props.route?.params);
   console.log("[ChatScreen] chatId:", props.route?.params?.chatId);
@@ -87,14 +127,18 @@ const ChatScreen = (props) => {
     const resolvedUsers = routeUsers || fallbackUsers;
 
     if (Array.isArray(resolvedUsers) && resolvedUsers.length > 0) {
-      console.log("[ChatScreen] Updating chatUsers from route/chatData:", resolvedUsers);
+      console.log(
+        "[ChatScreen] Updating chatUsers from route/chatData:",
+        resolvedUsers
+      );
       setChatUsers(resolvedUsers);
     } else {
-      console.warn("[ChatScreen] Failed to resolve chat users", { routeUsers, fallbackUsers });
+      console.warn("[ChatScreen] Failed to resolve chat users", {
+        routeUsers,
+        fallbackUsers,
+      });
     }
   }, [props.route, chatData]);
-
-
 
 
   // Automatically find chatId if only newChatData is passed
@@ -104,23 +148,24 @@ const ChatScreen = (props) => {
       const existingChat = Object.entries(storedChats).find(([id, chat]) => {
         return (
           chat.users.length === fallbackChatData.users.length &&
-          chat.users.every(userId => newUsersSet.has(userId))
+          chat.users.every((userId) => newUsersSet.has(userId))
         );
       });
 
       if (existingChat) {
-        console.log("Found existing chat from newChatData, setting chatId:", existingChat[0]);
+        console.log(
+          "Found existing chat from newChatData, setting chatId:",
+          existingChat[0]
+        );
         setChatId(existingChat[0]);
       }
     }
   }, [chatId, fallbackChatData, storedChats]);
 
-
-
   const getChatTitleFromName = () => {
     if (!Array.isArray(chatUsers)) return "Chat";
 
-    const otherUserId = chatUsers.find(uid => uid !== userData.userId);
+    const otherUserId = chatUsers.find((uid) => uid !== userData.userId);
     const otherUserData = storedUsers?.[otherUserId];
 
     if (!otherUserData) {
@@ -130,7 +175,6 @@ const ChatScreen = (props) => {
 
     return `${otherUserData.firstName} ${otherUserData.lastName}`;
   };
-
 
   useEffect(() => {
     const translateMessages = async () => {
@@ -155,7 +199,10 @@ const ChatScreen = (props) => {
             msg.language &&
             msg.language !== preferredLang
           ) {
-            updatedMsg.translatedText = await translateText(msg.text, preferredLang);
+            updatedMsg.translatedText = await translateText(
+              msg.text,
+              preferredLang
+            );
           } else {
             updatedMsg.translatedText = null;
           }
@@ -166,7 +213,10 @@ const ChatScreen = (props) => {
             preferredLang !== "no_translation" &&
             msg.ocrTextFromImage
           ) {
-            updatedMsg.translatedTextFromImage = await translateText(msg.ocrTextFromImage, preferredLang);
+            updatedMsg.translatedTextFromImage = await translateText(
+              msg.ocrTextFromImage,
+              preferredLang
+            );
           } else {
             updatedMsg.translatedTextFromImage = null;
           }
@@ -205,7 +255,10 @@ const ChatScreen = (props) => {
     if (!chatData.users || !Array.isArray(chatData.users)) {
       console.warn("[ChatScreen] chatData.users is invalid:", chatData.users);
     }
-    console.log("[ChatScreen] Setting chat users from chatData:", chatData.users);
+    console.log(
+      "[ChatScreen] Setting chat users from chatData:",
+      chatData.users
+    );
   }, [chatData]);
 
   const sendMessage = useCallback(async () => {
@@ -226,7 +279,7 @@ const ChatScreen = (props) => {
           ...props.route.params.newChatData,
           createdBy: userData.userId,
           createdAt: new Date().toISOString(),
-          key: id
+          key: id,
         };
 
         dispatch({
@@ -234,9 +287,9 @@ const ChatScreen = (props) => {
           payload: {
             chatsData: {
               ...storedChats,
-              [id]: newChat
-            }
-          }
+              [id]: newChat,
+            },
+          },
         });
 
         updatedChatUsers = newChat.users || [];
@@ -248,7 +301,13 @@ const ChatScreen = (props) => {
       }
 
       // ✅ Use updatedChatUsers + id directly
-      await sendTextMessage(id, userData, messageText, replyingTo?.key, updatedChatUsers);
+      await sendTextMessage(
+        id,
+        userData,
+        messageText,
+        replyingTo?.key,
+        updatedChatUsers
+      );
       setMessageText("");
       setReplyingTo(null);
     } catch (error) {
@@ -258,8 +317,16 @@ const ChatScreen = (props) => {
     } finally {
       setIsSending(false);
     }
-  }, [messageText, chatId, isSending, chatUsers, storedChats, storedUsers, userData, replyingTo]);
-
+  }, [
+    messageText,
+    chatId,
+    isSending,
+    chatUsers,
+    storedChats,
+    storedUsers,
+    userData,
+    replyingTo,
+  ]);
 
   const handleVoiceRecording = async () => {
     if (!isRecording) {
@@ -269,7 +336,7 @@ const ChatScreen = (props) => {
       // Start timer
       setRecordingDuration(0);
       recordingIntervalRef.current = setInterval(() => {
-        setRecordingDuration(prev => prev + 1);
+        setRecordingDuration((prev) => prev + 1);
       }, 1000);
     } else {
       const audioUrl = await stopRecordingAndUpload(chatId);
@@ -281,7 +348,10 @@ const ChatScreen = (props) => {
       if (audioUrl) {
         let id = chatId;
         if (!id) {
-          id = await createChat(userData.userId, props.route.params.newChatData);
+          id = await createChat(
+            userData.userId,
+            props.route.params.newChatData
+          );
           setChatId(id);
         }
 
@@ -320,23 +390,35 @@ const ChatScreen = (props) => {
     }
   }, []);
 
-  const uploadImage = useCallback(async (uri, translatedTextFromImage = null, ocrTextFromImage = null) => {
-    setIsLoading(true);
-    try {
-      let id = chatId;
-      if (!id) {
-        id = await createChat(userData.userId, props.route.params.newChatData);
-        setChatId(id);
-      }
+  const uploadImage = useCallback(
+    async (uri, translatedTextFromImage = null, ocrTextFromImage = null) => {
+      setIsLoading(true);
+      try {
+        let id = chatId;
+        if (!id) {
+          id = await createChat(
+            userData.userId,
+            props.route.params.newChatData
+          );
+          setChatId(id);
+        }
 
-      const uploadUrl = await uploadImageAsync(uri, true);
-      await sendImage(chatId, userData, uploadUrl, replyingTo, chatUsers, translatedTextFromImage, ocrTextFromImage);
-    } catch (error) {
-      console.log(error);
-    } finally {
-      setIsLoading(false);
-    }
-  },
+        const uploadUrl = await uploadImageAsync(uri, true);
+        await sendImage(
+          chatId,
+          userData,
+          uploadUrl,
+          replyingTo,
+          chatUsers,
+          translatedTextFromImage,
+          ocrTextFromImage
+        );
+      } catch (error) {
+        console.log(error);
+      } finally {
+        setIsLoading(false);
+      }
+    },
     [chatId, userData, replyingTo, chatUsers]
   );
 
@@ -354,7 +436,7 @@ const ChatScreen = (props) => {
 
       if (extractedText) {
         const detectedLang = await detectLanguage(extractedText);
-        const recipientId = chatUsers.find(uid => uid !== userData.userId);
+        const recipientId = chatUsers.find((uid) => uid !== userData.userId);
         const recipientSnapshot = await get(
           child(ref(getDatabase(getFirebaseApp())), `users/${recipientId}`)
         );
@@ -372,10 +454,18 @@ const ChatScreen = (props) => {
       console.log("Sending image with translation:", {
         imageUri,
         extractedText,
-        translatedText
+        translatedText,
       });
 
-      await sendImage(chatId, userData, downloadUrl, replyingTo, chatUsers, translatedText, extractedText);
+      await sendImage(
+        chatId,
+        userData,
+        downloadUrl,
+        replyingTo,
+        chatUsers,
+        translatedText,
+        extractedText
+      );
       setReplyingTo(null);
     } catch (err) {
       console.error("sendImageWithTranslation failed:", err);
@@ -385,7 +475,7 @@ const ChatScreen = (props) => {
   useEffect(() => {
     if (!chatData || !chatUsers?.length) return;
 
-    const otherUserId = chatUsers.find(uid => uid !== userData.userId);
+    const otherUserId = chatUsers.find((uid) => uid !== userData.userId);
     const otherUserData = storedUsers[otherUserId];
 
     if (otherUserData) {
@@ -394,14 +484,16 @@ const ChatScreen = (props) => {
       //console.log("[ChatScreen] storedUsers:", storedUsers);
 
       props.navigation.setOptions({
-        headerTitle: chatData.chatName ?? `${otherUserData.firstName} ${otherUserData.lastName}`,
+        headerTitle:
+          chatData.chatName ??
+          `${otherUserData.firstName} ${otherUserData.lastName}`,
         headerRight: renderHeaderRight,
       });
     }
   }, [chatData, chatUsers, storedUsers]);
 
   const handleImagePress = (imageUrl) => {
-    props.navigation.navigate('FullScreenImage', { imageUrl });
+    props.navigation.navigate("FullScreenImage", { imageUrl });
   };
 
   if (!chatData || !chatData.users || chatData.users.length === 0) {
@@ -414,11 +506,14 @@ const ChatScreen = (props) => {
 
   const renderHeaderRight = () => {
     if (!Array.isArray(chatUsers) || chatUsers.length < 2) {
-      console.warn("[ChatScreen] chatUsers is invalid or incomplete:", chatUsers);
+      console.warn(
+        "[ChatScreen] chatUsers is invalid or incomplete:",
+        chatUsers
+      );
       return null;
     }
 
-    const otherUserId = chatUsers.find(uid => uid !== userData.userId);
+    const otherUserId = chatUsers.find((uid) => uid !== userData.userId);
     const otherUserData = storedUsers[otherUserId];
 
     return (
@@ -427,20 +522,42 @@ const ChatScreen = (props) => {
           title="Voice Call"
           iconName="call-outline"
           onPress={async () => {
-            await initiateCall({
-              chatId,
-              callerId: userData.userId,
-              receiverId: otherUserId,
-            });
+            console.log("📞 Voice Call button pressed");
 
-            props.navigation.navigate("VoiceCall", {
-              chatId,
-              callerData: userData,
-              receiverData: otherUserData,
-              isCaller: true,
-            });
+            if (!chatId) {
+              console.warn("[ChatScreen] Cannot call — chatId missing.");
+              return;
+            }
+
+            if (!otherUserId || !otherUserData) {
+              console.warn(
+                "[ChatScreen] Cannot initiate call — missing user data."
+              );
+              return;
+            }
+
+            console.log("initiateCall running");
+
+            try {
+              await initiateCall({
+                chatId,
+                callerId: userData.userId,
+                receiverId: otherUserId,
+              });
+
+              console.log("Navigating to VoiceCall screen...");
+              props.navigation.navigate("VoiceCall", {
+                chatId,
+                callerData: userData,
+                receiverData: otherUserData,
+                isCaller: true,
+              });
+            } catch (error) {
+              console.error("❌ initiateCall failed:", error);
+            }
           }}
         />
+
         <Item
           title="Chat settings"
           iconName="settings-outline"
@@ -453,11 +570,16 @@ const ChatScreen = (props) => {
                 chatUsers,
               });
             } else {
-              const otherUserId = chatUsers.find(uid => uid !== userData.userId);
+              const otherUserId = chatUsers.find(
+                (uid) => uid !== userData.userId
+              );
               const otherUserData = storedUsers[otherUserId];
 
               if (!otherUserData) {
-                console.warn("[ChatScreen] Missing user data for:", otherUserId);
+                console.warn(
+                  "[ChatScreen] Missing user data for:",
+                  otherUserId
+                );
                 return;
               }
 
@@ -473,7 +595,6 @@ const ChatScreen = (props) => {
     );
   };
 
-
   return (
     <SafeAreaView edges={["right", "left", "bottom"]} style={styles.container}>
       <KeyboardAvoidingView
@@ -481,16 +602,27 @@ const ChatScreen = (props) => {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={100}
       >
-        <ImageBackground source={backgroundImage} style={styles.backgroundImage}>
+        <ImageBackground
+          source={backgroundImage}
+          style={styles.backgroundImage}
+        >
           <PageContainer style={{ backgroundColor: "transparent" }}>
-            {!chatId && <Bubble text="This is a new chat. Say hi!" type="system" />}
-            {errorBannerText !== "" && <Bubble text={errorBannerText} type="error" />}
+            {!chatId && (
+              <Bubble text="This is a new chat. Say hi!" type="system" />
+            )}
+            {errorBannerText !== "" && (
+              <Bubble text={errorBannerText} type="error" />
+            )}
 
             {chatId && (
               <FlatList
                 ref={(ref) => (flatList.current = ref)}
-                onContentSizeChange={() => flatList.current.scrollToEnd({ animated: false })}
-                onLayout={() => flatList.current.scrollToEnd({ animated: false })}
+                onContentSizeChange={() =>
+                  flatList.current.scrollToEnd({ animated: false })
+                }
+                onLayout={() =>
+                  flatList.current.scrollToEnd({ animated: false })
+                }
                 data={translatedMessages}
                 renderItem={(itemData) => {
                   const message = itemData.item;
@@ -502,7 +634,8 @@ const ChatScreen = (props) => {
                   }
 
                   const sender = message.sentBy && storedUsers[message.sentBy];
-                  const name = sender && `${sender.firstName} ${sender.lastName}`;
+                  const name =
+                    sender && `${sender.firstName} ${sender.lastName}`;
 
                   return (
                     <Bubble
@@ -513,9 +646,16 @@ const ChatScreen = (props) => {
                       userId={userData.userId}
                       chatId={chatId}
                       date={message.sentAt}
-                      name={!chatData.isGroupChat || isOwnMessage ? undefined : name}
+                      name={
+                        !chatData.isGroupChat || isOwnMessage ? undefined : name
+                      }
                       setReply={() => setReplyingTo(message)}
-                      replyingTo={message.replyTo && translatedMessages.find(i => i.key === message.replyTo)}
+                      replyingTo={
+                        message.replyTo &&
+                        translatedMessages.find(
+                          (i) => i.key === message.replyTo
+                        )
+                      }
                       imageUrl={message.imageUrl}
                       onImagePress={handleImagePress}
                       translatedText={message.translatedText}
@@ -557,14 +697,24 @@ const ChatScreen = (props) => {
               <Feather name="camera" size={24} color={colors.red} />
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity style={{ ...styles.mediaButton, ...styles.sendButton }} onPress={sendMessage}>
+            <TouchableOpacity
+              style={{ ...styles.mediaButton, ...styles.sendButton }}
+              onPress={sendMessage}
+            >
               <Feather name="send" size={20} color="white" />
             </TouchableOpacity>
           )}
 
           <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <TouchableOpacity style={styles.mediaButton} onPress={handleVoiceRecording}>
-              <FontAwesome name={isRecording ? "stop" : "microphone"} size={24} color={colors.red} />
+            <TouchableOpacity
+              style={styles.mediaButton}
+              onPress={handleVoiceRecording}
+            >
+              <FontAwesome
+                name={isRecording ? "stop" : "microphone"}
+                size={24}
+                color={colors.red}
+              />
             </TouchableOpacity>
             {isRecording && (
               <Text style={{ marginLeft: 6, color: colors.red }}>
@@ -583,11 +733,16 @@ const ChatScreen = (props) => {
             titleStyle={styles.popupTitleStyle}
             onDismiss={() => setTempImageUri("")}
             customView={
-              <View style={{ alignItems: 'center' }}>
-                {isLoading && <ActivityIndicator size="small" color={colors.primary} />}
+              <View style={{ alignItems: "center" }}>
+                {isLoading && (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                )}
                 {!isLoading && tempImageUri !== "" && (
                   <>
-                    <Image source={{ uri: tempImageUri }} style={{ width: 300, height: 300, marginBottom: 10 }} />
+                    <Image
+                      source={{ uri: tempImageUri }}
+                      style={{ width: 300, height: 300, marginBottom: 10 }}
+                    />
 
                     <TouchableOpacity
                       onPress={() => setTempImageUri("")}
@@ -616,13 +771,24 @@ const ChatScreen = (props) => {
                         let translatedText = null;
 
                         if (ocrText) {
-                          const recipientId = chatUsers.find(uid => uid !== userData.userId);
+                          const recipientId = chatUsers.find(
+                            (uid) => uid !== userData.userId
+                          );
                           const db = getDatabase();
-                          const recipientSnap = await get(ref(db, `users/${recipientId}`));
-                          const recipientLang = recipientSnap.val()?.preferredLanguage;
+                          const recipientSnap = await get(
+                            ref(db, `users/${recipientId}`)
+                          );
+                          const recipientLang =
+                            recipientSnap.val()?.preferredLanguage;
 
-                          if (recipientLang && recipientLang !== "no_translation") {
-                            translatedText = await translateText(ocrText, recipientLang);
+                          if (
+                            recipientLang &&
+                            recipientLang !== "no_translation"
+                          ) {
+                            translatedText = await translateText(
+                              ocrText,
+                              recipientLang
+                            );
                           }
                         }
 
@@ -630,14 +796,15 @@ const ChatScreen = (props) => {
                       }}
                       style={styles.alertButtonGreen}
                     >
-                      <Text style={styles.alertButtonText}>Send with Translation</Text>
+                      <Text style={styles.alertButtonText}>
+                        Send with Translation
+                      </Text>
                     </TouchableOpacity>
                   </>
                 )}
               </View>
             }
           />
-
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -715,9 +882,3 @@ const styles = StyleSheet.create({
 });
 
 export default ChatScreen;
-
-
-
-
-
-

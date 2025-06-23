@@ -1,72 +1,216 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
-import RtcEngine, { RtcLocalView, RtcRemoteView, VideoRenderMode, ClientRole } from 'react-native-agora';
-import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, useRoute } from '@react-navigation/native';
-import colors from '../constants/colors';
-import { logCallMessage } from '../utils/actions/chatActions';
-import { ImageBackground } from 'react-native';
-import backgroundImage from '../assets/call-background.jpeg';
-import defaultAvatar from '../assets/images/userImage-1.png';
+import { getDatabase, ref, set, update, get } from "firebase/database";
+import { lastKnownScreenRef } from "../navigation/MainNavigator";
+import React, { useEffect, useRef, useState } from "react";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Image,
+  ImageBackground,
+  Alert,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import Proximity from "react-native-proximity";
+import { DeviceEventEmitter } from "react-native";
+import { useKeepAwake } from "expo-keep-awake";
+import { useNavigation, useRoute } from "@react-navigation/native";
+import colors from "../constants/colors";
+import { logCallMessage } from "../utils/actions/chatActions";
+import backgroundImage from "../assets/call-background.jpeg";
+import defaultAvatar from "../assets/images/userImage-1.png";
+import ZegoExpressEngine from "zego-express-engine-reactnative";
+import { createEngine } from "../utils/zegoHelper";
+import { destroyEngine } from "../utils/zegoHelper";
 
-
-
-const APP_ID = "3baa3524be2c48d08ea9380ae162e499";
-const TEMP_TOKEN = "007eJxTYDj2dHeS8Y9VKSdDDrJqX8ybteGd7Jx9zCHejFb+/5/wGF5TYDBOSkw0NjUySUo1SjaxSDGwSE20NLYwSEw1NDNKNbG0nNJjntEQyMhw1yCZmZEBAkF8boaS1OKS5MScHEMjYwYGAHWKIfQ=";
+import { onValue } from "firebase/database";
 
 const VoiceCallScreen = () => {
-  const [joined, setJoined] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isSpeakerOn, setIsSpeakerOn] = useState(false);
   const [callTime, setCallTime] = useState(0);
-  const [remoteUserId, setRemoteUserId] = useState(null);
+  const [remoteUserJoined, setRemoteUserJoined] = useState(false);
   const timerRef = useRef(null);
 
-  const engineRef = useRef(null);
+  const alreadyEnded = useRef(false);
+
   const navigation = useNavigation();
   const route = useRoute();
 
   const { chatId, receiverData, callerData, isCaller } = route.params;
+  const userInfo = isCaller ? receiverData : callerData;
+
+  const localUserId = isCaller ? callerData.userId : receiverData.userId;
+  const remoteUserId = isCaller ? receiverData.userId : callerData.userId;
+  const displayName = isCaller ? callerData.firstName : receiverData.firstName;
+
+  const stringLocalUserId = String(localUserId);
+  const stringRemoteUserId = String(remoteUserId);
+
+  const localStreamId = `${chatId}_${stringLocalUserId}`;
+  const remoteStreamId = `${chatId}_${stringRemoteUserId}`;
+
+  const [isNearEar, setIsNearEar] = useState(false);
 
   useEffect(() => {
-    const init = async () => {
-      const engine = await RtcEngine.create(APP_ID);
-      engineRef.current = engine;
+    const db = getDatabase();
+    const callRef = ref(db, `calls/call_${chatId}`);
 
-      await engine.enableAudio();
+    const unsubscribe = onValue(callRef, (snapshot) => {
+      const data = snapshot.val();
 
-      engine.addListener('UserJoined', (uid) => {
-        console.log('Remote user joined:', uid);
-        setRemoteUserId(uid);
-        startTimer();
-      });
+      if (data?.status === "connected") {
+        if (!remoteUserJoined) {
+          setRemoteUserJoined(true);
+          startTimer();
+        }
 
-      engine.addListener('UserOffline', () => {
-        console.log('Remote user left');
-        stopTimer();
-        endCall();
-      });
+        (async () => {
+          await createEngine(); // 🧠 Ensure engine is ready
+          joinRoomAndStartCall(); // ✅ Both caller and receiver join
+        })();
+      }
 
-      engine.addListener('JoinChannelSuccess', () => {
-        console.log('Joined channel successfully');
-        setJoined(true);
-      });
+      if (data?.status === "ended") {
+        console.log("📴 Firebase status is 'ended', ending call...");
+        setTimeout(() => {
+          endCall();
+        }, 200);
+      }
+    });
 
-      await engine.joinChannel(TEMP_TOKEN, chatId, null, 0);
-    };
+    if (isCaller) {
+      (async () => {
+        try {
+          const db = getDatabase();
+          const callId = `call_${chatId}`;
 
-    init();
+          // Write call data FIRST
+          await set(ref(db, `calls/${callId}`), {
+            callerId: callerData.userId,
+            receiverId: receiverData.userId,
+            chatId,
+            status: "calling",
+            statusHistory: ["calling"],
+            timestamp: Date.now(),
+          });
+
+          console.log(
+            "📡 Call data written to Firebase at:",
+            `calls/${callId}`
+          );
+
+          // THEN start the engine + call
+          await createEngine();
+          await startCall();
+        } catch (err) {
+          console.error("❌ Caller setup failed:", err.message);
+        }
+      })();
+    }
+
+    let timeout;
+
+    if (isCaller) {
+      // ⏰ Set timeout to auto-end call if not picked in 60 seconds
+      timeout = setTimeout(async () => {
+        try {
+          const snapshot = await get(ref(db, `calls/call_${chatId}`));
+          const callData = snapshot.val();
+
+          if (callData?.status === "calling") {
+            console.log("⏰ Auto-ending call after 1 min");
+            await update(ref(db, `calls/call_${chatId}`), { status: "ended" });
+          }
+        } catch (err) {
+          console.warn("⚠️ Auto-end check failed:", err.message);
+        }
+      }, 60000); // 60 seconds
+    }
 
     return () => {
-      engineRef.current?.leaveChannel();
-      engineRef.current?.destroy();
-      stopTimer();
+      unsubscribe();
+      cleanup();
+      if (timeout) clearTimeout(timeout); // cancel timeout if user accepts/rejects
     };
   }, []);
 
+  const startCall = async () => {
+    try {
+      const engine = ZegoExpressEngine.instance();
+
+      engine.loginRoom(chatId, {
+        userID: localUserId.toString(),
+        userName: displayName,
+      });
+
+      engine.muteMicrophone(false);
+      engine.setAudioRouteToSpeaker(false);
+
+      engine.on("roomUserUpdate", (roomID, updateType, userList) => {
+        if (updateType === "ADD") {
+          setRemoteUserJoined(true);
+          startTimer();
+        }
+      });
+
+      engine.on("roomStreamUpdate", (roomID, updateType, streamList) => {
+        if (updateType === "DELETE") {
+          stopTimer();
+          endCall();
+        }
+      });
+    } catch (err) {
+      console.error("🚨 Failed to start call:", err.message);
+    }
+  };
+
+  const joinRoomAndStartCall = async () => {
+    const engine = ZegoExpressEngine.instance();
+
+    engine.loginRoom(chatId, {
+      userID: localUserId.toString(),
+      userName: displayName,
+    });
+
+    engine.setAudioRouteToSpeaker(false);
+
+    engine.startPublishingStream(localStreamId);
+    engine.startPlayingStream(remoteStreamId);
+    engine.muteMicrophone(false); // Make sure mic is on
+
+    engine.on("roomUserUpdate", (roomID, updateType, userList) => {
+      if (updateType === "ADD") {
+        setRemoteUserJoined(true);
+        startTimer();
+      }
+    });
+
+    engine.on("roomStreamUpdate", (roomID, updateType, streamList) => {
+      if (updateType === "DELETE") {
+        stopTimer();
+        endCall();
+      }
+    });
+  };
+
+  const cleanup = async () => {
+    stopTimer();
+
+    try {
+      const engine = ZegoExpressEngine.instance();
+      engine.stopPublishingStream();
+      engine.stopPlayingStream(chatId);
+      engine.logoutRoom(chatId);
+      await destroyEngine();
+    } catch (err) {
+      console.warn("⚠️ Engine cleanup failed:", err?.message);
+    }
+  };
+
   const startTimer = () => {
     timerRef.current = setInterval(() => {
-      setCallTime((prev) => prev + 1);
+      setCallTime((prevTime) => prevTime + 1);
     }, 1000);
   };
 
@@ -77,48 +221,158 @@ const VoiceCallScreen = () => {
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
   };
 
   const endCall = async () => {
+    if (alreadyEnded.current) return;
+    alreadyEnded.current = true;
+
     stopTimer();
 
-    // ✅ Add this line:
-    await logCallMessage(chatId, isCaller ? callerData.userId : receiverData.userId, "Voice call ended", "ended");
+    try {
+      const db = getDatabase();
+      const callId = `call_${chatId}`;
 
-    navigation.goBack();
+      // ✅ Mark call ended in Firebase
+      await update(ref(db, `calls/${callId}`), {
+        status: "ended",
+        statusHistory: ["calling", "connected", "ended"],
+        endedAt: Date.now(),
+      });
+
+      // ✅ Log in chat
+      await logCallMessage(
+        chatId,
+        isCaller ? callerData.userId : receiverData.userId,
+        "Voice call ended",
+        "ended"
+      );
+
+      console.log("✅ Firebase call status updated");
+    } catch (error) {
+      console.error("❌ Failed to update call status:", error.message);
+    }
+
+    try {
+      await cleanup();
+    } catch (err) {
+      console.warn("⚠️ Cleanup skipped:", err.message);
+    }
+
+    // ✅ Smart Navigation Logic
+    const routes = navigation.getState()?.routes;
+    const current = routes?.[routes.length - 1]?.name;
+    const previous = routes?.[routes.length - 2]?.name;
+
+    console.log("📦 Current Route:", current);
+    console.log("🔙 Previous Route:", previous);
+
+    if (
+      navigation.canGoBack() &&
+      (current === "VoiceCall" || current === "IncomingCall")
+    ) {
+      navigation.goBack();
+    } else if (
+      previous &&
+      previous !== "VoiceCall" &&
+      previous !== "IncomingCall"
+    ) {
+      navigation.navigate(previous);
+    } else {
+      const lastScreen = lastKnownScreenRef.current;
+
+      if (
+        lastScreen &&
+        lastScreen !== "VoiceCall" &&
+        lastScreen !== "IncomingCall"
+      ) {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: lastScreen }],
+        });
+      } else {
+        navigation.reset({
+          index: 1,
+          routes: [
+            { name: "Home" },
+            {
+              name: "ChatScreen",
+              params: { userId: remoteUserId },
+            },
+          ],
+        });
+      }
+    }
   };
-
 
   const toggleMute = () => {
     const newMute = !isMuted;
     setIsMuted(newMute);
-    engineRef.current?.muteLocalAudioStream(newMute);
+    ZegoExpressEngine.instance().muteMicrophone(newMute);
   };
 
   const toggleSpeaker = () => {
     const newSpeaker = !isSpeakerOn;
     setIsSpeakerOn(newSpeaker);
-    engineRef.current?.setEnableSpeakerphone(newSpeaker);
+    ZegoExpressEngine.instance().setAudioRouteToSpeaker(newSpeaker);
   };
 
-  const userInfo = isCaller ? receiverData : callerData;
+  useKeepAwake(); // Prevent screen from turning off automatically
 
+  useEffect(() => {
+    const handleProximity = (data) => {
+      if (data.proximity) {
+        console.log("🔒 Phone is near ear - screen should dim or turn off");
+        setIsNearEar(true);
+      } else {
+        console.log("🔓 Phone is away from ear - screen on");
+        setIsNearEar(false);
+      }
+    };
+
+    const listener = DeviceEventEmitter.addListener(
+      "proximity",
+      handleProximity
+    );
+
+    return () => {
+      listener.remove(); // 🔄 Correct way to remove listener
+    };
+  }, []);
+
+  if (isNearEar) {
+    return <View style={{ flex: 1, backgroundColor: "black" }} />;
+  }
   return (
-
     <ImageBackground source={backgroundImage} style={styles.container}>
       <Image
-        source={userInfo.profilePicture ? { uri: userInfo.profilePicture } : defaultAvatar}
+        source={
+          userInfo.profilePicture
+            ? { uri: userInfo.profilePicture }
+            : defaultAvatar
+        }
         style={styles.avatar}
       />
-      <Text style={styles.name}>{userInfo.firstName} {userInfo.lastName}</Text>
+      <Text style={styles.name}>
+        {userInfo.firstName} {userInfo.lastName}
+      </Text>
       <Text style={styles.status}>
-        {remoteUserId ? formatTime(callTime) : isCaller ? 'Calling...' : 'Ringing...'}
+        {remoteUserJoined
+          ? formatTime(callTime)
+          : isCaller
+          ? "Calling..."
+          : "Ringing..."}
       </Text>
 
       <View style={styles.controls}>
         <TouchableOpacity onPress={toggleMute}>
-          <Ionicons name={isMuted ? 'mic-off' : 'mic'} size={32} color={colors.grey} padding={12} />
+          <Ionicons
+            name={isMuted ? "mic-off" : "mic"}
+            size={32}
+            color={colors.grey}
+            padding={12}
+          />
         </TouchableOpacity>
 
         <TouchableOpacity onPress={endCall} style={styles.endCallButton}>
@@ -126,7 +380,12 @@ const VoiceCallScreen = () => {
         </TouchableOpacity>
 
         <TouchableOpacity onPress={toggleSpeaker}>
-          <Ionicons name={isSpeakerOn ? 'volume-high' : 'volume-mute'} size={32} color={colors.grey} padding={12} />
+          <Ionicons
+            name={isSpeakerOn ? "volume-high" : "volume-mute"}
+            size={32}
+            color={colors.grey}
+            padding={12}
+          />
         </TouchableOpacity>
       </View>
     </ImageBackground>
@@ -136,9 +395,9 @@ const VoiceCallScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    resizeMode: 'cover', // optional
+    alignItems: "center",
+    justifyContent: "center",
+    resizeMode: "cover",
   },
   avatar: {
     width: 120,
@@ -148,23 +407,23 @@ const styles = StyleSheet.create({
   },
   name: {
     fontSize: 24,
-    color: 'black',
-    fontWeight: 'bold',
+    color: "black",
+    fontWeight: "bold",
   },
   status: {
     fontSize: 18,
-    color: 'red',
+    color: "red",
     marginTop: 8,
     marginBottom: 40,
   },
   controls: {
-    flexDirection: 'row',
-    width: '70%',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    width: "70%",
+    justifyContent: "space-between",
     paddingHorizontal: 20,
   },
   endCallButton: {
-    backgroundColor: 'red',
+    backgroundColor: "red",
     padding: 12,
     borderRadius: 50,
   },

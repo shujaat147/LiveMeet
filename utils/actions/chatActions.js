@@ -275,7 +275,3 @@ const sendPushNotificationForUsers = (chatUsers, title, body, chatId) => {
         }
     })
 }
-
-
-
-
