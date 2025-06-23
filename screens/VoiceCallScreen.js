@@ -11,9 +11,6 @@ import {
   Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import Proximity from "react-native-proximity";
-import { DeviceEventEmitter } from "react-native";
-import { useKeepAwake } from "expo-keep-awake";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import colors from "../constants/colors";
 import { logCallMessage } from "../utils/actions/chatActions";
@@ -49,8 +46,6 @@ const VoiceCallScreen = () => {
 
   const localStreamId = `${chatId}_${stringLocalUserId}`;
   const remoteStreamId = `${chatId}_${stringRemoteUserId}`;
-
-  const [isNearEar, setIsNearEar] = useState(false);
 
   useEffect(() => {
     const db = getDatabase();
@@ -318,32 +313,6 @@ const VoiceCallScreen = () => {
     ZegoExpressEngine.instance().setAudioRouteToSpeaker(newSpeaker);
   };
 
-  useKeepAwake(); // Prevent screen from turning off automatically
-
-  useEffect(() => {
-    const handleProximity = (data) => {
-      if (data.proximity) {
-        console.log("🔒 Phone is near ear - screen should dim or turn off");
-        setIsNearEar(true);
-      } else {
-        console.log("🔓 Phone is away from ear - screen on");
-        setIsNearEar(false);
-      }
-    };
-
-    const listener = DeviceEventEmitter.addListener(
-      "proximity",
-      handleProximity
-    );
-
-    return () => {
-      listener.remove(); // 🔄 Correct way to remove listener
-    };
-  }, []);
-
-  if (isNearEar) {
-    return <View style={{ flex: 1, backgroundColor: "black" }} />;
-  }
   return (
     <ImageBackground source={backgroundImage} style={styles.container}>
       <Image
