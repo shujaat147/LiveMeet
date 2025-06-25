@@ -14,12 +14,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { getFirebaseApp } from "../utils/firebaseHelper";
 import { child, get, getDatabase, off, onValue, ref } from "firebase/database";
 import { setChatsData } from "../store/chatSlice";
-import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  View,
-} from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Platform, View } from "react-native";
 import colors from "../constants/colors";
 import commonStyles from "../constants/commonStyles";
 import { setStoredUsers } from "../store/userSlice";
@@ -30,8 +25,7 @@ import VoiceCallScreen from "../screens/VoiceCallScreen";
 import { StackActions, useNavigation } from "@react-navigation/native";
 import IncomingCallScreen from "../screens/IncomingCallScreen";
 import FullScreenImageScreen from "../screens/FullScreenImageScreen";
-
-export const lastKnownScreenRef = { current: null };
+import { lastKnownScreenRef } from "../utils/navigationUtils";
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -494,7 +488,7 @@ const MainNavigator = ({ isNavigationReady }) => {
       console.log("🧹 Unsubscribing Firebase listeners");
       refs.forEach((refNode) => off(refNode));
     };
-  }, [userData, storedUsers]);
+  }, [userData?.userId]);
 
   if (isLoading) {
     return (

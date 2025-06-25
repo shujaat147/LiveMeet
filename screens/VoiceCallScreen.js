@@ -1,15 +1,7 @@
 import { getDatabase, ref, set, update, get } from "firebase/database";
-import { lastKnownScreenRef } from "../navigation/MainNavigator";
+import { lastKnownScreenRef } from "../utils/navigationUtils";
 import React, { useEffect, useRef, useState } from "react";
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Image,
-  ImageBackground,
-  Alert,
-} from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, Image, ImageBackground, Alert } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import colors from "../constants/colors";

@@ -69,6 +69,13 @@ const ContactScreen = props => {
             />
 
             <PageTitle text={`${currentUser.firstName} ${currentUser.lastName}`} />
+
+            {currentUser.email &&
+                <Text style={{ color: "#888", fontSize: 15, marginTop: 2, marginBottom: 5, textAlign: "center" }}>
+                    {currentUser.email}
+                </Text>
+            }
+
             {
                 currentUser.about &&
                 <Text style={styles.about} numberOfLines={2}>{currentUser.about}</Text>
@@ -98,13 +105,16 @@ const ContactScreen = props => {
         {
             chatData && chatData.isGroupChat &&
             (
-                isLoading ?
-                    <ActivityIndicator size='small' color={colors.primary} /> :
-                    <SubmitButton
-                        title="Remove from chat"
-                        color={colors.red}
-                        onPress={removeFromChat}
-                    />
+                <View style={{ marginTop: 20 }}>
+                    {isLoading
+                        ? <ActivityIndicator size='small' color={colors.primary} />
+                        : <SubmitButton
+                            title="Remove from chat"
+                            color={colors.red}
+                            onPress={removeFromChat}
+                        />
+                    }
+                </View>
             )
         }
 

@@ -264,7 +264,7 @@ const NewChatScreen = ({ navigation, route }) => {
 
                     return <DataItem
                         title={`${userData.firstName} ${userData.lastName}`}
-                        subTitle={userData.about}
+                        subTitle={userData.email}
                         image={userData.profilePicture}
                         onPress={() => userPressed(userId)}
                         type={isGroupChat ? "checkbox" : ""}

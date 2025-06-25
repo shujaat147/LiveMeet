@@ -9,6 +9,7 @@ import PageTitle from '../components/PageTitle';
 import colors from '../constants/colors';
 import { deleteEntireChatForUser } from '../utils/actions/userActions'; // ✅
 import { removeChatData } from '../store/chatSlice'; // ✅
+import { selectUserChats } from '../store/selectors/chatSelectors';
 
 const ChatListScreen = props => {
     const dispatch = useDispatch();
@@ -20,20 +21,7 @@ const ChatListScreen = props => {
     const userData = useSelector(state => state.auth.userData);
     const storedUsers = useSelector(state => state.users.storedUsers);
 
-    const userChats = useSelector(state => {
-        const chatsData = state.chats.chatsData;
-        const currentUserId = state.auth.userData?.userId;
-
-        if (!currentUserId || !chatsData) return [];
-
-        const filteredChats = Object.values(chatsData).filter(chat =>
-            chat.users.includes(currentUserId)
-        );
-
-        return filteredChats.sort((a, b) => {
-            return new Date(b.updatedAt) - new Date(a.updatedAt);
-        });
-    });
+    const userChats = useSelector(selectUserChats);
 
     useEffect(() => {
         props.navigation.setOptions({
