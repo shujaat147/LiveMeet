@@ -11,9 +11,10 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Modal
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Feather } from "@expo/vector-icons";
+import { Feather, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { HeaderButtons, Item } from "react-navigation-header-buttons";
 import { useSelector } from "react-redux";
 
@@ -33,19 +34,29 @@ import {
   launchImagePicker,
   openCamera,
   uploadImageAsync,
+  pickVideo,
+  pickDocument,
+  uploadVideoAsync,
+  uploadDocumentAsync,
 } from "../utils/imagePickerHelper";
 import { initiateCall } from "../utils/actions/callActions";
 import { FontAwesome } from "@expo/vector-icons";
-import { Audio } from "expo-av";
 import { startRecording, stopRecordingAndUpload } from "../utils/audioHelper"; // You’ll create this file
 import { get, getDatabase, ref, push, set } from "firebase/database";
 import { useMemo } from "react";
 import { translateText } from "../utils/translateHelper";
 import { performOCR } from "../utils/imagePickerHelper";
+import * as ImagePicker from "expo-image-picker";
+import { getAuth } from "firebase/auth";
+import * as VideoThumbnails from 'expo-video-thumbnails';
 
+const MAX_PREVIEW_WIDTH = 400;
+const MAX_PREVIEW_HEIGHT = 700;
+const MIN_PREVIEW_WIDTH = 180;
+const MIN_PREVIEW_HEIGHT = 120;
 
 const ChatScreen = (props) => {
-  
+  console.log("Current user:", getAuth().currentUser);
   const [messageText, setMessageText] = useState("");
 
   const passedChatId = props.route?.params?.chatId;
@@ -114,11 +125,10 @@ const ChatScreen = (props) => {
 
   const [chatUsers, setChatUsers] = useState([]);
 
-  console.log("[ChatScreen] route.params:", props.route?.params);
-  console.log("[ChatScreen] chatId:", props.route?.params?.chatId);
-  console.log("[ChatScreen] newChatData:", props.route?.params?.newChatData);
-  console.log("[ChatScreen] computed chatData:", chatData);
-  console.log("[ChatScreen] chatUsers state:", chatUsers);
+  // console.log("[ChatScreen] route.params:", props.route?.params);
+  // console.log("[ChatScreen] chatId:", props.route?.params?.chatId);
+  // console.log("[ChatScreen] newChatData:", props.route?.params?.newChatData);
+  // console.log("[ChatScreen] chatUsers state:", chatUsers);
 
   useEffect(() => {
     const routeUsers = props.route?.params?.newChatData?.users;
@@ -595,6 +605,164 @@ const ChatScreen = (props) => {
     );
   };
 
+  const [attachmentMenuVisible, setAttachmentMenuVisible] = useState(false);
+
+  const handleCamera = async () => {
+    setAttachmentMenuVisible(false);
+    await takePhoto(); // uses your working openCamera logic
+  };
+
+  // Photos & Images
+  const handlePhotos = async () => {
+    setAttachmentMenuVisible(false);
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 1,
+      });
+      if (!result.cancelled && result.assets && result.assets.length > 0) {
+        setTempImageUri(result.assets[0].uri); // triggers your image sending popup
+      }
+    } catch (err) {
+      console.warn("Image pick error:", err);
+    }
+  };
+
+  const handleVideo = async () => {
+    setAttachmentMenuVisible(false);
+    const videoUri = await pickVideo();
+    if (videoUri) {
+      try {
+        // 1. Generate thumbnail
+        const { uri: thumbnailUri } = await VideoThumbnails.getThumbnailAsync(
+          videoUri,
+          { time: 1000 } // 1 second in
+        );
+
+        // 2. Upload video and thumbnail
+        const downloadUrl = await uploadVideoAsync(videoUri);
+        const thumbnailUrl = await uploadImageAsync(thumbnailUri, true);
+
+        // 3. Send message
+        let id = chatId;
+        if (!id) {
+          id = await createChat(userData.userId, props.route.params.newChatData);
+          setChatId(id);
+        }
+
+        const videoMessage = {
+          type: "video",
+          videoUrl: downloadUrl,
+          thumbnailUrl: thumbnailUrl, // <--- ADD THIS FIELD
+          timestamp: Date.now(),
+          sentBy: userData.userId,
+        };
+
+        const db = getDatabase();
+        const messagesRef = ref(db, `messages/${id}`);
+        const newMessageRef = push(messagesRef);
+        await set(newMessageRef, videoMessage);
+
+      } catch (err) {
+        console.warn("Failed to upload/send video:", err);
+      }
+    }
+  };
+
+  const handleDocument = async () => {
+    setAttachmentMenuVisible(false);
+    const pickedDoc = await pickDocument();
+    console.log("Picked document:", pickedDoc);
+    if (pickedDoc) {
+      try {
+        const { uri, name, size, mimeType } = pickedDoc;
+
+        console.log("Uploading document:", uri, name);
+
+        const downloadUrl = await uploadDocumentAsync(uri, name);
+        console.log("Download URL for document:", downloadUrl);
+
+        let id = chatId;
+        if (!id) {
+          id = await createChat(userData.userId, props.route.params.newChatData);
+          setChatId(id);
+        }
+
+        const docMessage = {
+          type: "document",
+          documentUrl: downloadUrl,
+          fileName: name,
+          fileSize: size,
+          fileType: mimeType,
+          timestamp: Date.now(),
+          sentBy: userData.userId,
+        };
+        console.log("Saving docMessage to Firebase:", docMessage);
+
+        const db = getDatabase();
+        const messagesRef = ref(db, `messages/${id}`);
+        const newMessageRef = push(messagesRef);
+        await set(newMessageRef, docMessage);
+
+      } catch (err) {
+        console.warn("Failed to upload/send document:", err);
+      }
+    }
+  };
+
+  const ImagePreview = ({ imageUri }) => {
+    const [dimensions, setDimensions] = useState(null);
+
+    useEffect(() => {
+      if (!imageUri) return;
+      Image.getSize(
+        imageUri,
+        (originalWidth, originalHeight) => {
+          let width = originalWidth;
+          let height = originalHeight;
+          const widthRatio = MAX_PREVIEW_WIDTH / width;
+          const heightRatio = MAX_PREVIEW_HEIGHT / height;
+          const scale = Math.min(widthRatio, heightRatio, 1);
+          width = Math.max(width * scale, MIN_PREVIEW_WIDTH);
+          height = Math.max(height * scale, MIN_PREVIEW_HEIGHT);
+          setDimensions({ width, height });
+        },
+        () => setDimensions({ width: MAX_PREVIEW_WIDTH, height: MAX_PREVIEW_HEIGHT })
+      );
+    }, [imageUri]);
+
+    if (!dimensions) {
+      return (
+        <View
+          style={{
+            width: MAX_PREVIEW_WIDTH,
+            height: MAX_PREVIEW_HEIGHT,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <ActivityIndicator size="large" color="#666" />
+        </View>
+      );
+    }
+
+    return (
+      <Image
+        source={{ uri: imageUri }}
+        style={{
+          width: dimensions.width,
+          height: dimensions.height,
+          borderRadius: 12,
+          backgroundColor: "#000",
+          alignSelf: "center",
+          marginBottom: 10,
+        }}
+        resizeMode="cover"
+      />
+    );
+  };
+
   return (
     <SafeAreaView edges={["right", "left", "bottom"]} style={styles.container}>
       <KeyboardAvoidingView
@@ -660,6 +828,12 @@ const ChatScreen = (props) => {
                       onImagePress={handleImagePress}
                       translatedText={message.translatedText}
                       translatedTextFromImage={message.translatedTextFromImage}
+                      videoUrl={message.videoUrl}
+                      thumbnailUrl={message.thumbnailUrl}
+                      documentUrl={message.documentUrl}
+                      fileName={message.fileName}
+                      fileSize={message.fileSize}
+                      fileType={message.fileType}
                     />
                   );
                 }}
@@ -677,9 +851,40 @@ const ChatScreen = (props) => {
         </ImageBackground>
 
         <View style={styles.inputContainer}>
-          <TouchableOpacity style={styles.mediaButton} onPress={pickImage}>
-            <Feather name="plus" size={24} color={colors.red} />
+          <TouchableOpacity onPress={() => setAttachmentMenuVisible(true)}>
+            <Ionicons name="add" size={28} color={colors.red} />
           </TouchableOpacity>
+          <Modal
+            visible={attachmentMenuVisible}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setAttachmentMenuVisible(false)}
+          >
+            <TouchableOpacity
+              style={styles.overlay}
+              activeOpacity={1}
+              onPressOut={() => setAttachmentMenuVisible(false)}
+            >
+              <View style={styles.menuContainer}>
+                <TouchableOpacity style={styles.menuItem} onPress={handleCamera}>
+                  <Ionicons name="camera" size={22} color={colors.red} />
+                  <Text style={styles.menuText}>Camera</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.menuItem} onPress={handlePhotos}>
+                  <Ionicons name="image" size={22} color={colors.red} />
+                  <Text style={styles.menuText}>Photos & Images</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.menuItem} onPress={handleVideo}>
+                  <Ionicons name="videocam" size={22} color={colors.red} />
+                  <Text style={styles.menuText}>Video</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.menuItem} onPress={handleDocument}>
+                  <MaterialIcons name="insert-drive-file" size={22} color={colors.red} />
+                  <Text style={styles.menuText}>Document</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
+          </Modal>
 
           <TextInput
             style={styles.textbox}
@@ -725,41 +930,88 @@ const ChatScreen = (props) => {
 
           <AwesomeAlert
             show={tempImageUri !== ""}
-            title="Send image?"
             closeOnTouchOutside={true}
             closeOnHardwareBackPress={false}
             showConfirmButton={false}
             showCancelButton={false}
-            titleStyle={styles.popupTitleStyle}
             onDismiss={() => setTempImageUri("")}
+            // FULLSCREEN STYLES:
+            contentContainerStyle={{
+              width: "100%",
+              height: "100%",
+              backgroundColor: "transparent",
+              borderRadius: 0,
+              padding: 0,
+              margin: 0,
+              flex: 1,
+              justifyContent: "center",
+              alignItems: "center",
+            }}
+            overlayStyle={{
+              backgroundColor: "#212121",
+              flex: 1,
+            }}
             customView={
-              <View style={{ alignItems: "center" }}>
-                {isLoading && (
-                  <ActivityIndicator size="small" color={colors.primary} />
-                )}
-                {!isLoading && tempImageUri !== "" && (
-                  <>
-                    <Image
-                      source={{ uri: tempImageUri }}
-                      style={{ width: 300, height: 300, marginBottom: 10 }}
-                    />
+              <View
+                style={{
+                  flex: 1,
+                  width: "100%",
+                  height: "100%",
+                  backgroundColor: "#212121",
+                }}
+              >
+                {/* Top Bar: Cross on Left, Buttons on Right */}
+                <View
+                  style={{
+                    position: "relative",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    paddingTop: 10, // adjust for notch/status bar as needed
+                    paddingRight: 0,
+                    backgroundColor: "#212121",
+                    zIndex: 10,
+                  }}
+                >
+                  {/* Close/Cross Button */}
+                  <TouchableOpacity
+                    onPress={() => setTempImageUri("")}
+                    style={{
+                      padding: 10,
+                      marginRight: 0,
+                    }}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    {/* Use Ionicons/MaterialIcons for icon or emoji ✕ */}
+                    <Text style={{ color: "#fff", fontSize: 30 }}>✕</Text>
+                  </TouchableOpacity>
 
-                    <TouchableOpacity
-                      onPress={() => setTempImageUri("")}
-                      style={styles.alertButtonRed}
-                    >
-                      <Text style={styles.alertButtonText}>Cancel</Text>
-                    </TouchableOpacity>
+                  {/* Spacer to push buttons to right */}
+                  <View style={{ flex: 1 }} />
 
+                  {/* Send Buttons Row */}
+                  <View style={{ flexDirection: "row", alignItems: "center" }}>
                     <TouchableOpacity
                       onPress={async () => {
                         const uri = tempImageUri;
                         setTempImageUri("");
-                        await uploadImage(uri); // send without translation
+                        await uploadImage(uri);
                       }}
-                      style={styles.alertButtonGray}
+                      style={{
+                        marginHorizontal: 6,
+                        paddingVertical: 8,
+                        paddingHorizontal: 14,
+                        backgroundColor: "#333",
+                        borderRadius: 20,
+                        flexDirection: "row",
+                        alignItems: "center",
+                      }}
                     >
-                      <Text style={styles.alertButtonText}>Send Image</Text>
+                      <Text style={{ color: "#fff", fontSize: 17, marginRight: 6 }}>📤</Text>
+                      <Text style={{ color: "#fff", fontWeight: "bold" }}>Send</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
@@ -778,8 +1030,7 @@ const ChatScreen = (props) => {
                           const recipientSnap = await get(
                             ref(db, `users/${recipientId}`)
                           );
-                          const recipientLang =
-                            recipientSnap.val()?.preferredLanguage;
+                          const recipientLang = recipientSnap.val()?.preferredLanguage;
 
                           if (
                             recipientLang &&
@@ -792,17 +1043,46 @@ const ChatScreen = (props) => {
                           }
                         }
 
-                        await uploadImage(uri, translatedText, ocrText); // both translated and original OCR text
+                        await uploadImage(uri, translatedText, ocrText);
                       }}
-                      style={styles.alertButtonGreen}
+                      style={{
+                        marginLeft: 6,
+                        paddingVertical: 8,
+                        paddingHorizontal: 14,
+                        backgroundColor: "#1976d2",
+                        borderRadius: 20,
+                        flexDirection: "row",
+                        alignItems: "center",
+                      }}
                     >
-                      <Text style={styles.alertButtonText}>
-                        Send with Translation
-                      </Text>
+                      <Text style={{ color: "#fff", fontSize: 17, marginRight: 6 }}>🌐</Text>
+                      <Text style={{ color: "#fff", fontWeight: "bold" }}>Translate & Send</Text>
                     </TouchableOpacity>
-                  </>
-                )}
+                  </View>
+                </View>
+
+                {/* Fullscreen Image Preview */}
+                <View
+                  style={{
+                    position: "absolute",
+                    top: 50,
+                    right: 10,
+
+                    flex: 1,
+                    justifyContent: "center",
+                    alignItems: "center",
+                    width: "100%",
+                    height: "100%"
+                  }}
+                >
+                  {isLoading ? (
+                    <ActivityIndicator size="large" color={colors.primary} />
+                  ) : (
+                    tempImageUri !== "" && <ImagePreview imageUri={tempImageUri} />
+                  )}
+                </View>
               </View>
+
             }
           />
         </View>
@@ -879,6 +1159,28 @@ const styles = StyleSheet.create({
     color: "white",
     fontWeight: "bold",
   },
+  overlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.3)",
+  },
+  menuContainer: {
+    backgroundColor: colors.nearlyWhite,
+    padding: 18,
+    borderTopLeftRadius: 15,
+    borderTopRightRadius: 15,
+    elevation: 8,
+  },
+  menuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+  },
+  menuText: {
+    marginLeft: 12,
+    fontSize: 17,
+    color: colors.red,
+  }
 });
 
 export default ChatScreen;

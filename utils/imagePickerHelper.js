@@ -4,6 +4,7 @@ import { getFirebaseApp } from './firebaseHelper';
 import uuid from 'react-native-uuid';
 import { getDownloadURL, getStorage, ref, uploadBytesResumable } from 'firebase/storage';
 import { Image } from 'react-native-compressor';
+import * as DocumentPicker from 'expo-document-picker';
 
 export const launchImagePicker = async () => {
   await checkMediaPermissions();
@@ -136,4 +137,94 @@ export const performOCR = async (imageUri) => {
     console.error("OCR failed:", err);
     return null;
   }
+};
+
+export const uploadVideoAsync = async (uri) => {
+  const app = getFirebaseApp();
+
+  const blob = await new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.onload = function () {
+      resolve(xhr.response);
+    };
+    xhr.onerror = function (e) {
+      console.log(e);
+      reject(new TypeError("Network request failed"));
+    };
+    xhr.responseType = "blob";
+    xhr.open("GET", uri, true);
+    xhr.send();
+  });
+
+  const storageRef = ref(getStorage(app), `chatVideos/${uuid.v4()}`); // Store in 'chatVideos' folder
+
+  await uploadBytesResumable(storageRef, blob);
+
+  blob.close();
+
+  return await getDownloadURL(storageRef);
+};
+
+// Function to handle document upload
+export const uploadDocumentAsync = async (uri, fileName) => {
+  const app = getFirebaseApp();
+
+  const blob = await new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.onload = function () {
+      resolve(xhr.response);
+    };
+    xhr.onerror = function (e) {
+      console.log(e);
+      reject(new TypeError("Network request failed"));
+    };
+    xhr.responseType = "blob";
+    xhr.open("GET", uri, true);
+    xhr.send();
+  });
+
+  const storageRef = ref(getStorage(app), `chatDocuments/${fileName || uuid.v4()}`); // Store in 'chatDocuments' folder
+
+  await uploadBytesResumable(storageRef, blob);
+
+  blob.close();
+
+  return await getDownloadURL(storageRef);
+};
+
+// Add pickDocument function using expo-document-picker
+export const pickDocument = async () => {
+  try {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: "*/*", // allow all file types
+      copyToCacheDirectory: true,
+      multiple: false,
+    });
+    console.log("Document picker result:", result);
+    if (result && result.assets && result.assets.length > 0) {
+      // Return the first picked file's URI (and optionally other fields)
+      return result.assets[0];
+    }
+  } catch (err) {
+    console.warn("Document picker error:", err);
+  }
+  return null;
+};
+
+// Add pickVideo function for video picking
+export const pickVideo = async () => {
+  try {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+      allowsEditing: true,
+      quality: 1,
+    });
+
+    if (!result.cancelled && result.assets?.length > 0) {
+      return result.assets[0].uri; // Return the URI of the selected video
+    }
+  } catch (err) {
+    console.warn("Video picker error:", err);
+  }
+  return null;
 };

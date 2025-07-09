@@ -66,11 +66,11 @@ const FullScreenImageScreen = ({ route, navigation }) => {
  return (
   <View style={styles.container}>
    <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-    <Ionicons name="arrow-back" size={28} color={colors.red} />
+    <Ionicons name="arrow-back" size={28} color={colors.nearlyWhite} />
    </TouchableOpacity>
 
    <TouchableOpacity style={styles.downloadBtn} onPress={handleDownload}>
-    <Octicons name="download" size={28} color={colors.red} />
+    <Octicons name="download" size={28} color={colors.nearlyWhite} />
    </TouchableOpacity>
 
    <GestureDetector gesture={pinchGesture}>
@@ -89,7 +89,7 @@ export default FullScreenImageScreen;
 const styles = StyleSheet.create({
  container: {
   flex: 1,
-  backgroundColor: colors.nearlyWhite,
+  backgroundColor: "#212121",
  },
  image: {
   width: '100%',
