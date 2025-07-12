@@ -29,11 +29,25 @@ import { useDispatch, useSelector } from "react-redux";
 import { hideMessage } from "../store/messagesSlice";
 import { Audio, Video } from "expo-av";
 import * as Linking from "expo-linking";
+import RNSimpleCrypto from 'react-native-simple-crypto';
+
+const SECRET_KEY = 'finalYearProjectLiveMeet'; //AES 16, 24, or 32 bytes
 
 const MAX_WIDTH = 300;    // Try 280–340 for big screens
 const MAX_HEIGHT = 420;   // Try 400–500 for big screens
 const MIN_WIDTH = 120;    // Increase if you want narrow images bigger
-const MIN_HEIGHT = 120; 
+const MIN_HEIGHT = 120;
+
+async function decryptMessage(cipherBase64, ivBase64) {
+  const keyBuffer = await RNSimpleCrypto.utils.convertUtf8ToArrayBuffer(SECRET_KEY);
+  const cipherBuffer = await RNSimpleCrypto.utils.convertBase64ToArrayBuffer(cipherBase64);
+  const ivBuffer = await RNSimpleCrypto.utils.convertBase64ToArrayBuffer(ivBase64);
+
+  const decryptedBuffer = await RNSimpleCrypto.AES.decrypt(cipherBuffer, keyBuffer, ivBuffer);
+  const decryptedText = RNSimpleCrypto.utils.convertArrayBufferToUtf8(decryptedBuffer);
+
+  return decryptedText;
+}
 
 function formatAmPm(dateString) {
   const date = new Date(dateString);
@@ -78,8 +92,29 @@ const Bubble = (props) => {
     fileName,
     thumbnailUrl,
     fileSize,
-    fileType
+    fileType,
+    iv
   } = props;
+
+  const [decryptedText, setDecryptedText] = useState('');
+
+  useEffect(() => {
+    let mounted = true;
+    async function runDecrypt() {
+      if (text && iv) {
+        try {
+          const result = await decryptMessage(text, iv);
+          if (mounted) setDecryptedText(result);
+        } catch (e) {
+          if (mounted) setDecryptedText(text); // fallback to raw text
+        }
+      } else if (text) {
+        setDecryptedText(text); // Show raw for old msgs
+      }
+    }
+    runDecrypt();
+    return () => { mounted = false; }
+  }, [text, iv]);
 
   const getDocIcon = (type = "", fileName = "") => {
     const lower = (type + " " + fileName).toLowerCase();
@@ -454,7 +489,7 @@ const Bubble = (props) => {
           {/* ---- Standard Text Message ---- */}
           {!audioUrl && !imageUrl && !videoUrl && !documentUrl && (
             <View>
-              <Text style={textStyle}>{text}</Text>
+              <Text style={textStyle}>{decryptedText || "[Decrypting...]"}</Text>
             </View>
           )}
 

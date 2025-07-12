@@ -11,12 +11,13 @@ import { store } from "./store/store";
 import { MenuProvider } from "react-native-popup-menu";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { Provider as PaperProvider } from "react-native-paper";
-import * as Linking from "expo-linking";
-console.log('Linking:', Linking);
-import * as VideoThumbnails from 'expo-video-thumbnails';
-console.log('VideoThumbnails:', VideoThumbnails);
-import * as DocumentPicker from 'expo-document-picker';
-console.log('DocumentPicker:', DocumentPicker);
+
+// import * as Linking from "expo-linking";
+// console.log('Linking:', Linking);
+// import * as VideoThumbnails from 'expo-video-thumbnails';
+// console.log('VideoThumbnails:', VideoThumbnails);
+// import * as DocumentPicker from 'expo-document-picker';
+// console.log('DocumentPicker:', DocumentPicker);
 
 
 LogBox.ignoreLogs(["AsyncStorage has been extracted"]);

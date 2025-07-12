@@ -834,6 +834,7 @@ const ChatScreen = (props) => {
                       fileName={message.fileName}
                       fileSize={message.fileSize}
                       fileType={message.fileType}
+                      iv={message.iv}
                     />
                   );
                 }}

@@ -3,6 +3,9 @@ import { getFirebaseApp } from "../firebaseHelper";
 import { getUserPushTokens } from "./authActions";
 import { addUserChat, deleteUserChat, getUserChats } from "./userActions";
 import { detectLanguage, translateText } from "../translateHelper";
+import RNSimpleCrypto from 'react-native-simple-crypto';
+
+const SECRET_KEY = 'finalYearProjectLiveMeet'; //AES 16, 24, or 32 bytes
 
 export const createChat = async (loggedInUserId, chatData) => {
     const newChatData = {
@@ -121,11 +124,14 @@ const sendMessage = async (chatId, senderData, messageText, imageUrl, replyTo, t
         translatedText = await translateText(messageText, recipientLang);
     }
 
+    const { cipherBase64, ivBase64 } = await encryptMessage(messageText);
+
     // 6. Construct and push the message
     const messageData = {
         sentBy: senderData.userId,
         sentAt: new Date().toISOString(),
-        text: messageText,
+        text: cipherBase64,
+        iv: ivBase64,
         language: detectedLang,
         translatedText: translatedText,
         originalImageText: originalImageText,
@@ -274,4 +280,21 @@ const sendPushNotificationForUsers = (chatUsers, title, body, chatId) => {
             })
         }
     })
+}
+
+async function encryptMessage(plainText) {
+    // Convert key and plaintext to ArrayBuffers
+    const keyBuffer = await RNSimpleCrypto.utils.convertUtf8ToArrayBuffer(SECRET_KEY);
+    const iv = await RNSimpleCrypto.utils.randomBytes(16); // 16 bytes IV
+
+    const textBuffer = await RNSimpleCrypto.utils.convertUtf8ToArrayBuffer(plainText);
+
+    // Encrypt
+    const cipherBuffer = await RNSimpleCrypto.AES.encrypt(textBuffer, keyBuffer, iv);
+
+    // Convert to base64 for storage
+    const cipherBase64 = RNSimpleCrypto.utils.convertArrayBufferToBase64(cipherBuffer);
+    const ivBase64 = RNSimpleCrypto.utils.convertArrayBufferToBase64(iv);
+
+    return { cipherBase64, ivBase64 };
 }
