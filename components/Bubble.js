@@ -30,13 +30,9 @@ import { hideMessage } from "../store/messagesSlice";
 import { Audio, Video } from "expo-av";
 import * as Linking from "expo-linking";
 import RNSimpleCrypto from 'react-native-simple-crypto';
+console.log('Rendering bubble')
 
 const SECRET_KEY = 'finalYearProjectLiveMeet'; //AES 16, 24, or 32 bytes
-
-const MAX_WIDTH = 300;    // Try 280–340 for big screens
-const MAX_HEIGHT = 420;   // Try 400–500 for big screens
-const MIN_WIDTH = 120;    // Increase if you want narrow images bigger
-const MIN_HEIGHT = 120;
 
 async function decryptMessage(cipherBase64, ivBase64) {
   const keyBuffer = await RNSimpleCrypto.utils.convertUtf8ToArrayBuffer(SECRET_KEY);
@@ -230,48 +226,22 @@ const Bubble = (props) => {
   const wrapperStyle = { ...styles.wrapperStyle };
 
   const BubbleImage = ({ imageUrl, onImagePress }) => {
-    const [dimensions, setDimensions] = useState({
-      width: MAX_WIDTH,
-      height: MAX_HEIGHT,
-    });
-
-    useEffect(() => {
-      Image.getSize(
-        imageUrl,
-        (originalWidth, originalHeight) => {
-          let width = originalWidth;
-          let height = originalHeight;
-
-          // Scale down to fit max box (preserve ratio)
-          const widthRatio = MAX_WIDTH / width;
-          const heightRatio = MAX_HEIGHT / height;
-          const scale = Math.min(widthRatio, heightRatio, 1);
-
-          width = Math.max(width * scale, MIN_WIDTH);
-          height = Math.max(height * scale, MIN_HEIGHT);
-
-          setDimensions({ width, height });
-        },
-        (error) => {
-          // fallback if error
-          setDimensions({ width: MAX_WIDTH, height: MAX_HEIGHT });
-        }
-      );
-    }, [imageUrl]);
+    const FIXED_WIDTH = 250;  // WhatsApp style: 210px wide
+    const FIXED_HEIGHT = 300; // WhatsApp style: 270px tall
 
     return (
       <TouchableOpacity onPress={() => onImagePress(imageUrl)}>
         <Image
           source={{ uri: imageUrl }}
           style={{
-            width: dimensions.width,
-            height: dimensions.height,
+            width: FIXED_WIDTH,
+            height: FIXED_HEIGHT,
             borderRadius: 10,
             marginBottom: 5,
             alignSelf: "flex-start",
-            backgroundColor: "#000",
+            backgroundColor: "#212121",
           }}
-          resizeMode="contain"
+          resizeMode="contain" // or 'contain' if you prefer, but 'cover' is like WhatsApp
         />
       </TouchableOpacity>
     );
@@ -398,6 +368,7 @@ const Bubble = (props) => {
                         position: "absolute",
                         top: 0,
                         left: 0,
+                        backgroundColor: "#212121"
                       }}
                       resizeMode="contain"
                     />
@@ -410,7 +381,7 @@ const Bubble = (props) => {
                         height: 200,
                         justifyContent: "center",
                         alignItems: "center",
-                        backgroundColor: "rgba(0,0,0,0.15)", // slight overlay for visibility
+                        backgroundColor: "rgba(0, 0, 0, 0.03)", // slight overlay for visibility
                         borderRadius: 8,
                       }}
                     >
@@ -461,21 +432,19 @@ const Bubble = (props) => {
           {/* ---- Document Message ---- */}
           {documentUrl && (
             <TouchableOpacity
-              style={[styles.bubble, { width: 270 }]}
+              style={[styles.bubble, { width: 250 }]}
               onPress={() => Linking.openURL(documentUrl)}
             >
               <View style={{ flexDirection: "row", alignItems: "center" }}>
                 {getDocIcon(fileType)}
                 <View style={{ marginLeft: 12, flex: 1 }}>
                   <Text
-                    style={{ fontWeight: "bold", color: colors.red, flexShrink: 1, flexWrap: "wrap" }}
+                    style={{ color: colors.textColor, flexShrink: 1, flexWrap: "wrap" }}
                   >
                     {fileName || "Document"}
                   </Text>
                   {(fileSize || fileType) && (
                     <Text style={{ fontSize: 12, color: "#888" }}>
-                      {fileType ? fileType : ""}
-                      {fileType && fileSize ? " · " : ""}
                       {fileSize ? `${(fileSize / 1024).toFixed(1)} KB` : ""}
                     </Text>
                   )}
@@ -503,7 +472,7 @@ const Bubble = (props) => {
                 <Text
                   style={[
                     textStyle,
-                    { fontStyle: "italic", color: "gray", marginTop: 4 },
+                    { fontStyle: "italic", color: "gray", marginTop: 4, fontSize: 15 },
                   ]}
                 >
                   {translatedText}
@@ -579,6 +548,7 @@ const styles = StyleSheet.create({
   text: {
     fontFamily: "regular",
     letterSpacing: 0.3,
+    fontSize: 15
   },
   menuItemContainer: {
     flexDirection: "row",
@@ -632,4 +602,8 @@ const styles = StyleSheet.create({
   },
 });
 
-export default Bubble;
+export default React.memo(Bubble);
+
+
+
+

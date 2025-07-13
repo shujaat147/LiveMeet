@@ -49,11 +49,39 @@ import { performOCR } from "../utils/imagePickerHelper";
 import * as ImagePicker from "expo-image-picker";
 import { getAuth } from "firebase/auth";
 import * as VideoThumbnails from 'expo-video-thumbnails';
+import ChatMessages from "../components/ChatMessages";
+import RNSimpleCrypto from 'react-native-simple-crypto';
+
+const SECRET_KEY = 'finalYearProjectLiveMeet';
+
+async function decryptMessage(cipherBase64, ivBase64) {
+  const keyBuffer = await RNSimpleCrypto.utils.convertUtf8ToArrayBuffer(SECRET_KEY);
+  const cipherBuffer = await RNSimpleCrypto.utils.convertBase64ToArrayBuffer(cipherBase64);
+  const ivBuffer = await RNSimpleCrypto.utils.convertBase64ToArrayBuffer(ivBase64);
+  const decryptedBuffer = await RNSimpleCrypto.AES.decrypt(cipherBuffer, keyBuffer, ivBuffer);
+  const decryptedText = RNSimpleCrypto.utils.convertArrayBufferToUtf8(decryptedBuffer);
+  return decryptedText;
+}
 
 const MAX_PREVIEW_WIDTH = 400;
 const MAX_PREVIEW_HEIGHT = 700;
 const MIN_PREVIEW_WIDTH = 180;
 const MIN_PREVIEW_HEIGHT = 120;
+
+function getDateSeparatorString(dateString) {
+  const date = new Date(dateString);
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+
+  const isToday = date.toDateString() === today.toDateString();
+  const isYesterday = date.toDateString() === yesterday.toDateString();
+
+  if (isToday) return "Today";
+  if (isYesterday) return "Yesterday";
+  return date.toLocaleDateString(); // Local format (you can change style)
+}
+
 
 const ChatScreen = (props) => {
   console.log("Current user:", getAuth().currentUser);
@@ -124,6 +152,61 @@ const ChatScreen = (props) => {
   }, [chatId, storedChats, props.route?.params?.newChatData]);
 
   const [chatUsers, setChatUsers] = useState([]);
+
+  const renderItem = useCallback(
+    ({ item }) => {
+      if (item.type === "date-separator") {
+        return (
+          <View style={{ alignItems: "center", marginVertical: 8 }}>
+            <View style={{
+              backgroundColor: colors.extraLightGrey,
+              borderRadius: 5,
+              paddingHorizontal: 14,
+              paddingVertical: 6,
+            }}>
+              <Text style={{ color: colors.grey, fontWeight: "bold" }}>
+                {getDateSeparatorString(item.dateString)}
+              </Text>
+            </View>
+          </View>
+        );
+      }
+      const isOwnMessage = item.sentBy === userData.userId;
+      let messageType = isOwnMessage ? "myMessage" : "theirMessage";
+      if (item.type === "info" || item.type === "call_log") messageType = "info";
+      const sender = item.sentBy && storedUsers[item.sentBy];
+      const name = sender && `${sender.firstName} ${sender.lastName}`;
+
+      return (
+        <Bubble
+          type={messageType}
+          text={item.text}
+          audioUrl={item.audioUrl}
+          messageId={item.key}
+          userId={userData.userId}
+          chatId={chatId}
+          date={item.sentAt || item.timestamp}
+          name={!chatData.isGroupChat || isOwnMessage ? undefined : name}
+          setReply={() => setReplyingTo(item)}
+          replyingTo={
+            item.replyTo && translatedMessages.find(i => i.key === item.replyTo)
+          }
+          imageUrl={item.imageUrl}
+          onImagePress={handleImagePress}
+          translatedText={item.translatedText}
+          translatedTextFromImage={item.translatedTextFromImage}
+          videoUrl={item.videoUrl}
+          thumbnailUrl={item.thumbnailUrl}
+          documentUrl={item.documentUrl}
+          fileName={item.fileName}
+          fileSize={item.fileSize}
+          fileType={item.fileType}
+          iv={item.iv}
+        />
+      );
+    },
+    [userData.userId, chatId, chatData.isGroupChat, storedUsers, translatedMessages, handleImagePress]
+  );
 
   // console.log("[ChatScreen] route.params:", props.route?.params);
   // console.log("[ChatScreen] chatId:", props.route?.params?.chatId);
@@ -201,16 +284,27 @@ const ChatScreen = (props) => {
             return updatedMsg;
           }
 
+          let originalText = msg.text;
+
+          // If encrypted, decrypt before translation
+          if (msg.text && msg.iv) {
+            try {
+              originalText = await decryptMessage(msg.text, msg.iv);
+            } catch (e) {
+              originalText = msg.text; // fallback to raw
+            }
+          }
+
           // TEXT translation
           if (
             preferredLang &&
             preferredLang !== "no_translation" &&
-            msg.text &&
+            originalText &&
             msg.language &&
             msg.language !== preferredLang
           ) {
             updatedMsg.translatedText = await translateText(
-              msg.text,
+              originalText,
               preferredLang
             );
           } else {
@@ -711,7 +805,7 @@ const ChatScreen = (props) => {
     }
   };
 
-  const ImagePreview = ({ imageUri }) => {
+  const ImagePreview = React.memo(({ imageUri }) => {
     const [dimensions, setDimensions] = useState(null);
 
     useEffect(() => {
@@ -761,7 +855,30 @@ const ChatScreen = (props) => {
         resizeMode="cover"
       />
     );
-  };
+  });
+
+  const chatMessagesWithDates = useMemo(() => {
+    if (!translatedMessages || translatedMessages.length === 0) return [];
+    const result = [];
+    let lastDate = null;
+
+    translatedMessages.forEach((msg) => {
+      const dateValue = msg.sentAt || msg.timestamp;
+      if (!dateValue) return;
+      const msgDate = new Date(dateValue).toDateString();
+      if (msgDate !== lastDate) {
+        result.push({
+          type: "date-separator",
+          dateString: dateValue,
+          key: "date-separator-" + msgDate + "-" + Math.random(),
+        });
+        lastDate = msgDate;
+      }
+      result.push(msg);
+    });
+
+    return result;
+  }, [translatedMessages]);
 
   return (
     <SafeAreaView edges={["right", "left", "bottom"]} style={styles.container}>
@@ -783,61 +900,16 @@ const ChatScreen = (props) => {
             )}
 
             {chatId && (
-              <FlatList
-                ref={(ref) => (flatList.current = ref)}
+              <ChatMessages
+                messages={chatMessagesWithDates}
+                renderItem={renderItem}
+                flatListRef={flatList}
                 onContentSizeChange={() =>
                   flatList.current.scrollToEnd({ animated: false })
                 }
                 onLayout={() =>
                   flatList.current.scrollToEnd({ animated: false })
                 }
-                data={translatedMessages}
-                renderItem={(itemData) => {
-                  const message = itemData.item;
-                  const isOwnMessage = message.sentBy === userData.userId;
-
-                  let messageType = isOwnMessage ? "myMessage" : "theirMessage";
-                  if (message.type === "info" || message.type === "call_log") {
-                    messageType = "info";
-                  }
-
-                  const sender = message.sentBy && storedUsers[message.sentBy];
-                  const name =
-                    sender && `${sender.firstName} ${sender.lastName}`;
-
-                  return (
-                    <Bubble
-                      type={messageType}
-                      text={message.text}
-                      audioUrl={message.audioUrl}
-                      messageId={message.key}
-                      userId={userData.userId}
-                      chatId={chatId}
-                      date={message.sentAt}
-                      name={
-                        !chatData.isGroupChat || isOwnMessage ? undefined : name
-                      }
-                      setReply={() => setReplyingTo(message)}
-                      replyingTo={
-                        message.replyTo &&
-                        translatedMessages.find(
-                          (i) => i.key === message.replyTo
-                        )
-                      }
-                      imageUrl={message.imageUrl}
-                      onImagePress={handleImagePress}
-                      translatedText={message.translatedText}
-                      translatedTextFromImage={message.translatedTextFromImage}
-                      videoUrl={message.videoUrl}
-                      thumbnailUrl={message.thumbnailUrl}
-                      documentUrl={message.documentUrl}
-                      fileName={message.fileName}
-                      fileSize={message.fileSize}
-                      fileType={message.fileType}
-                      iv={message.iv}
-                    />
-                  );
-                }}
               />
             )}
           </PageContainer>
@@ -1185,3 +1257,8 @@ const styles = StyleSheet.create({
 });
 
 export default ChatScreen;
+
+
+
+
+
