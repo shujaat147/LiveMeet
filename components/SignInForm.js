@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useReducer, useState } from 'react';
+import { TouchableOpacity, Alert, Text, ActivityIndicator, View, Modal } from 'react-native';
 import Input from '../components/Input';
 import SubmitButton from '../components/SubmitButton';
 import { Feather } from '@expo/vector-icons';
@@ -6,9 +7,10 @@ import { Feather } from '@expo/vector-icons';
 import { validateInput } from '../utils/actions/formActions';
 import { reducer } from '../utils/reducers/formReducer';
 import { signIn } from '../utils/actions/authActions';
-import { ActivityIndicator, Alert } from 'react-native';
 import { useDispatch } from 'react-redux';
 import colors from '../constants/colors';
+import { sendPasswordResetEmail } from "firebase/auth";
+import { auth } from "../utils/firebaseHelper";
 
 const isTestMode = false;
 
@@ -30,6 +32,8 @@ const SignInForm = props => {
     const [error, setError] = useState();
     const [isLoading, setIsLoading] = useState(false);
     const [formState, dispatchFormState] = useReducer(reducer, initialState);
+    const [showForgot, setShowForgot] = useState(false);
+    const [forgotEmail, setForgotEmail] = useState("");
 
     const inputChangedHandler = useCallback((inputId, inputValue) => {
         const result = validateInput(inputId, inputValue);
@@ -70,6 +74,24 @@ const SignInForm = props => {
 
     }, [dispatch, formState]);
 
+    const handleForgotPassword = async () => {
+        if (!forgotEmail) {
+            Alert.alert("Error", "Please enter your email.");
+            return;
+        }
+        try {
+            await sendPasswordResetEmail(auth, forgotEmail.trim());
+            Alert.alert(
+                "Password Reset",
+                "A password reset link has been sent to your email."
+            );
+            setShowForgot(false);
+            setForgotEmail("");
+        } catch (error) {
+            Alert.alert("Error", error.message);
+        }
+    };
+
     return (
         <>
             <Input
@@ -94,6 +116,12 @@ const SignInForm = props => {
                 initialValue={formState.inputValues.password}
                 errorText={formState.inputValidities["password"]} />
 
+            <TouchableOpacity onPress={() => setShowForgot(true)}>
+                <Text style={{ color: colors.primary, marginTop: 12, marginBottom: -8, alignSelf: "flex-end" }}>
+                    Forgot Password?
+                </Text>
+            </TouchableOpacity>
+
             {
                 isLoading ?
                     <ActivityIndicator size={'small'} color={colors.red} style={{ marginTop: 10 }} /> :
@@ -103,6 +131,55 @@ const SignInForm = props => {
                         style={{ marginTop: 20, paddingVertical: 15 }}
                         disabled={!formState.formIsValid} />
             }
+
+            {showForgot && (
+                <Modal
+                    visible={showForgot}
+                    animationType="fade"
+                    transparent
+                    onRequestClose={() => setShowForgot(false)}
+                >
+                    <View style={{
+                        flex: 1,
+                        backgroundColor: "#0008",
+                        justifyContent: "center",
+                        alignItems: "center"
+                    }}>
+                        <View style={{
+                            backgroundColor: "white",
+                            padding: 24,
+                            borderRadius: 14,
+                            width: "85%"
+                        }}>
+                            <Text style={{ fontSize: 18, fontWeight: "bold", marginBottom: 12 }}>Reset Password</Text>
+                            <Input
+                                id="forgotEmail"
+                                label="Email"
+                                icon="mail"
+                                iconPack={Feather}
+                                value={forgotEmail}
+                                autoCapitalize="none"
+                                keyboardType="email-address"
+                                onInputChanged={(_, val) => setForgotEmail(val)}
+                                initialValue={forgotEmail}
+                                errorText={true}
+                            />
+                            <SubmitButton
+                                title="Send Reset Link"
+                                onPress={handleForgotPassword}
+                                style={{ marginTop: 18 }}
+                            />
+                            <SubmitButton
+                                title="Cancel"
+                                color={colors.red}
+                                onPress={() => setShowForgot(false)}
+                                style={{ marginTop: 6 }}
+                            />
+                        </View>
+                    </View>
+                </Modal>
+            )}
+
         </>
     )
 };

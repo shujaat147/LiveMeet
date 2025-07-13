@@ -721,7 +721,7 @@ const ChatScreen = (props) => {
     setAttachmentMenuVisible(false);
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: true,
         quality: 1,
       });
@@ -953,6 +953,7 @@ const ChatScreen = (props) => {
               <TouchableOpacity onPress={() => setAttachmentMenuVisible(true)}>
                 <Ionicons name="add" size={28} color={colors.red} />
               </TouchableOpacity>
+
               <TextInput
                 style={styles.textbox}
                 value={messageText}
@@ -963,6 +964,7 @@ const ChatScreen = (props) => {
                   }
                 }}
               />
+
               {messageText === "" ? (
                 <TouchableOpacity style={styles.mediaButton} onPress={takePhoto}>
                   <Feather name="camera" size={24} color={colors.red} />
@@ -975,17 +977,217 @@ const ChatScreen = (props) => {
                   <Feather name="send" size={20} color="white" />
                 </TouchableOpacity>
               )}
-              <TouchableOpacity
-                style={styles.mediaButton}
-                onPress={handleVoiceRecording}
-                disabled={isRecording}
-              >
-                <FontAwesome name="microphone" size={24} color={colors.red} />
-              </TouchableOpacity>
+
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <TouchableOpacity
+                  style={styles.mediaButton}
+                  onPress={handleVoiceRecording}
+                >
+                  <FontAwesome
+                    name={isRecording ? "stop" : "microphone"}
+                    size={24}
+                    color={colors.red}
+                  />
+                </TouchableOpacity>
+                {isRecording && (
+                  <Text style={{ marginLeft: 6, color: colors.red }}>
+                    {recordingDuration}s
+                  </Text>
+                )}
+              </View>
+
+              <AwesomeAlert
+                show={tempImageUri !== ""}
+                closeOnTouchOutside={true}
+                closeOnHardwareBackPress={false}
+                showConfirmButton={false}
+                showCancelButton={false}
+                onDismiss={() => setTempImageUri("")}
+                // FULLSCREEN STYLES:
+                contentContainerStyle={{
+                  width: "100%",
+                  height: "100%",
+                  backgroundColor: "transparent",
+                  borderRadius: 0,
+                  padding: 0,
+                  margin: 0,
+                  flex: 1,
+                  justifyContent: "center",
+                  alignItems: "center",
+                }}
+                overlayStyle={{
+                  backgroundColor: "#212121",
+                  flex: 1,
+                }}
+                customView={
+                  <View
+                    style={{
+                      flex: 1,
+                      width: "100%",
+                      height: "100%",
+                      backgroundColor: "#212121",
+                    }}
+                  >
+                    {/* Top Bar: Cross on Left, Buttons on Right */}
+                    <View
+                      style={{
+                        position: "relative",
+                        top: 0,
+                        left: 0,
+                        width: "100%",
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        paddingTop: 10, // adjust for notch/status bar as needed
+                        paddingRight: 0,
+                        backgroundColor: "#212121",
+                        zIndex: 10,
+                      }}
+                    >
+                      {/* Close/Cross Button */}
+                      <TouchableOpacity
+                        onPress={() => setTempImageUri("")}
+                        style={{
+                          padding: 10,
+                          marginRight: 0,
+                        }}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      >
+                        {/* Use Ionicons/MaterialIcons for icon or emoji ✕ */}
+                        <Text style={{ color: "#fff", fontSize: 30 }}>✕</Text>
+                      </TouchableOpacity>
+
+                      {/* Spacer to push buttons to right */}
+                      <View style={{ flex: 1 }} />
+
+                      {/* Send Buttons Row */}
+                      <View style={{ flexDirection: "row", alignItems: "center" }}>
+                        <TouchableOpacity
+                          onPress={async () => {
+                            const uri = tempImageUri;
+                            setTempImageUri("");
+                            await uploadImage(uri);
+                          }}
+                          style={{
+                            marginHorizontal: 6,
+                            paddingVertical: 8,
+                            paddingHorizontal: 14,
+                            backgroundColor: "#333",
+                            borderRadius: 20,
+                            flexDirection: "row",
+                            alignItems: "center",
+                          }}
+                        >
+                          <Text style={{ color: "#fff", fontSize: 17, marginRight: 6 }}>📤</Text>
+                          <Text style={{ color: "#fff", fontWeight: "bold" }}>Send</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          onPress={async () => {
+                            const uri = tempImageUri;
+                            setTempImageUri("");
+
+                            const ocrText = await performOCR(uri);
+                            let translatedText = null;
+
+                            if (ocrText) {
+                              const recipientId = chatUsers.find(
+                                (uid) => uid !== userData.userId
+                              );
+                              const db = getDatabase();
+                              const recipientSnap = await get(
+                                ref(db, `users/${recipientId}`)
+                              );
+                              const recipientLang = recipientSnap.val()?.preferredLanguage;
+
+                              if (
+                                recipientLang &&
+                                recipientLang !== "no_translation"
+                              ) {
+                                translatedText = await translateText(
+                                  ocrText,
+                                  recipientLang
+                                );
+                              }
+                            }
+
+                            await uploadImage(uri, translatedText, ocrText);
+                          }}
+                          style={{
+                            marginLeft: 6,
+                            paddingVertical: 8,
+                            paddingHorizontal: 14,
+                            backgroundColor: "#1976d2",
+                            borderRadius: 20,
+                            flexDirection: "row",
+                            alignItems: "center",
+                          }}
+                        >
+                          <Text style={{ color: "#fff", fontSize: 17, marginRight: 6 }}>🌐</Text>
+                          <Text style={{ color: "#fff", fontWeight: "bold" }}>Translate & Send</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+
+                    {/* Fullscreen Image Preview */}
+                    <View
+                      style={{
+                        position: "absolute",
+                        top: 50,
+                        right: 10,
+
+                        flex: 1,
+                        justifyContent: "center",
+                        alignItems: "center",
+                        width: "100%",
+                        height: "100%"
+                      }}
+                    >
+                      {isLoading ? (
+                        <ActivityIndicator size="large" color={colors.primary} />
+                      ) : (
+                        tempImageUri !== "" && <ImagePreview imageUri={tempImageUri} />
+                      )}
+                    </View>
+                  </View>
+                }
+              />
             </>
           )}
+
         </View>
       </KeyboardAvoidingView>
+      <Modal
+        visible={attachmentMenuVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAttachmentMenuVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.overlay}
+          activeOpacity={1}
+          onPressOut={() => setAttachmentMenuVisible(false)}
+        >
+          <View style={styles.menuContainer}>
+            <TouchableOpacity style={styles.menuItem} onPress={handleCamera}>
+              <Ionicons name="camera" size={22} color={colors.red} />
+              <Text style={styles.menuText}>Camera</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuItem} onPress={handlePhotos}>
+              <Ionicons name="image" size={22} color={colors.red} />
+              <Text style={styles.menuText}>Photos & Images</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuItem} onPress={handleVideo}>
+              <Ionicons name="videocam" size={22} color={colors.red} />
+              <Text style={styles.menuText}>Video</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuItem} onPress={handleDocument}>
+              <MaterialIcons name="insert-drive-file" size={22} color={colors.red} />
+              <Text style={styles.menuText}>Document</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 };

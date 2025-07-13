@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'; 
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert } from 'react-native';
 import { HeaderButtons, Item } from 'react-navigation-header-buttons';
 import { useDispatch, useSelector } from 'react-redux';
@@ -113,7 +113,9 @@ const ChatListScreen = props => {
 
                     if (isGroupChat) {
                         title = chatData.chatName;
-                        image = chatData.chatImage;
+                        image = chatData.chatImage
+                            // ? chatData.chatImage
+                            // : require("../assets/images/groupImage-1.png");
                     } else {
                         const otherUserId = chatData.users.find(uid => uid !== userData.userId);
                         const otherUser = storedUsers[otherUserId];
