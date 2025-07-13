@@ -50,18 +50,7 @@ import * as ImagePicker from "expo-image-picker";
 import { getAuth } from "firebase/auth";
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import ChatMessages from "../components/ChatMessages";
-import RNSimpleCrypto from 'react-native-simple-crypto';
-
-const SECRET_KEY = 'finalYearProjectLiveMeet';
-
-async function decryptMessage(cipherBase64, ivBase64) {
-  const keyBuffer = await RNSimpleCrypto.utils.convertUtf8ToArrayBuffer(SECRET_KEY);
-  const cipherBuffer = await RNSimpleCrypto.utils.convertBase64ToArrayBuffer(cipherBase64);
-  const ivBuffer = await RNSimpleCrypto.utils.convertBase64ToArrayBuffer(ivBase64);
-  const decryptedBuffer = await RNSimpleCrypto.AES.decrypt(cipherBuffer, keyBuffer, ivBuffer);
-  const decryptedText = RNSimpleCrypto.utils.convertArrayBufferToUtf8(decryptedBuffer);
-  return decryptedText;
-}
+import { decryptMessage } from "../utils/encryptionHelper";
 
 const MAX_PREVIEW_WIDTH = 400;
 const MAX_PREVIEW_HEIGHT = 700;
@@ -92,6 +81,20 @@ const ChatScreen = (props) => {
 
   const userData = useSelector((state) => state.auth.userData);
   const storedChats = useSelector((state) => state.chats.chatsData);
+  const scrollToMessageId = props.route?.params?.scrollToMessageId;
+
+  useEffect(() => {
+    if (scrollToMessageId && flatList.current && translatedMessages?.length) {
+      const idx = translatedMessages.findIndex(
+        m => m.key === scrollToMessageId || m.messageId === scrollToMessageId
+      );
+      if (idx >= 0) {
+        setTimeout(() => {
+          flatList.current.scrollToIndex({ index: idx, animated: true });
+        }, 500); // Allow rendering to complete
+      }
+    }
+  }, [scrollToMessageId, translatedMessages]);
 
   const resolvedChatId = useMemo(() => {
     if (passedChatId) return passedChatId;

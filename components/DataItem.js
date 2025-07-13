@@ -18,7 +18,7 @@ const DataItem = props => {
 
                 {
                     !icon && !hideImage &&
-                    <ProfileImage 
+                    <ProfileImage
                         uri={image}
                         size={imageSize}
                     />
@@ -63,6 +63,12 @@ const DataItem = props => {
                         <Ionicons name="chevron-forward-outline" size={18} color={colors.grey} />
                     </View>
                 }
+
+                {props.rightContent && (
+                    <View style={{ alignItems: "flex-end", marginLeft: 8, minWidth: 65 }}>
+                        {props.rightContent}
+                    </View>
+                )}
 
             </View>
         </TouchableWithoutFeedback>

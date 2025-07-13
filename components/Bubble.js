@@ -29,21 +29,8 @@ import { useDispatch, useSelector } from "react-redux";
 import { hideMessage } from "../store/messagesSlice";
 import { Audio, Video } from "expo-av";
 import * as Linking from "expo-linking";
-import RNSimpleCrypto from 'react-native-simple-crypto';
+import { decryptMessage } from "../utils/encryptionHelper";
 console.log('Rendering bubble')
-
-const SECRET_KEY = 'finalYearProjectLiveMeet'; //AES 16, 24, or 32 bytes
-
-async function decryptMessage(cipherBase64, ivBase64) {
-  const keyBuffer = await RNSimpleCrypto.utils.convertUtf8ToArrayBuffer(SECRET_KEY);
-  const cipherBuffer = await RNSimpleCrypto.utils.convertBase64ToArrayBuffer(cipherBase64);
-  const ivBuffer = await RNSimpleCrypto.utils.convertBase64ToArrayBuffer(ivBase64);
-
-  const decryptedBuffer = await RNSimpleCrypto.AES.decrypt(cipherBuffer, keyBuffer, ivBuffer);
-  const decryptedText = RNSimpleCrypto.utils.convertArrayBufferToUtf8(decryptedBuffer);
-
-  return decryptedText;
-}
 
 function formatAmPm(dateString) {
   const date = new Date(dateString);

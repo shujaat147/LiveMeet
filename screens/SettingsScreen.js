@@ -71,6 +71,8 @@ const SettingsScreen = (props) => {
             const chatMessages = Object.values(chat);
             result = result.concat(chatMessages);
         });
+        // Optional: sort by starredAt or message time
+        result.sort((a, b) => (b.starredAt || b.sentAt || 0) - (a.starredAt || a.sentAt || 0));
         return result;
     }, [starredMessages]);
 
