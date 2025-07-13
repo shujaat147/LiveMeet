@@ -41,7 +41,7 @@ import {
 } from "../utils/imagePickerHelper";
 import { initiateCall } from "../utils/actions/callActions";
 import { FontAwesome } from "@expo/vector-icons";
-import { startRecording, stopRecordingAndUpload } from "../utils/audioHelper"; // You’ll create this file
+import { startRecording, stopRecordingAndUpload, cancelRecording } from "../utils/audioHelper"; // You’ll create this file
 import { get, getDatabase, ref, push, set } from "firebase/database";
 import { useMemo } from "react";
 import { translateText } from "../utils/translateHelper";
@@ -84,7 +84,7 @@ function getDateSeparatorString(dateString) {
 
 
 const ChatScreen = (props) => {
-  console.log("Current user:", getAuth().currentUser);
+  console.log("Current user:", getAuth().currentUser?.email || null);
   const [messageText, setMessageText] = useState("");
 
   const passedChatId = props.route?.params?.chatId;
@@ -470,7 +470,17 @@ const ChatScreen = (props) => {
         const messagesRef = ref(db, `messages/${id}`);
         const newMessageRef = push(messagesRef);
         await set(newMessageRef, voiceMessage);
+        await set(ref(getDatabase(), `chats/${id}/latestMessageText`), "Voice message");
       }
+    }
+  };
+
+  const handleCancelRecording = async () => {
+    if (isRecording) {
+      await cancelRecording(); // Properly stop and clean up the recording object
+      setIsRecording(false);
+      setRecordingDuration(0);
+      if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
     }
   };
 
@@ -757,7 +767,7 @@ const ChatScreen = (props) => {
         const messagesRef = ref(db, `messages/${id}`);
         const newMessageRef = push(messagesRef);
         await set(newMessageRef, videoMessage);
-
+        await set(ref(getDatabase(), `chats/${id}/latestMessageText`), "Video");
       } catch (err) {
         console.warn("Failed to upload/send video:", err);
       }
@@ -798,7 +808,7 @@ const ChatScreen = (props) => {
         const messagesRef = ref(db, `messages/${id}`);
         const newMessageRef = push(messagesRef);
         await set(newMessageRef, docMessage);
-
+        await set(ref(getDatabase(), `chats/${id}/latestMessageText`), "Document");
       } catch (err) {
         console.warn("Failed to upload/send document:", err);
       }
@@ -924,240 +934,56 @@ const ChatScreen = (props) => {
         </ImageBackground>
 
         <View style={styles.inputContainer}>
-          <TouchableOpacity onPress={() => setAttachmentMenuVisible(true)}>
-            <Ionicons name="add" size={28} color={colors.red} />
-          </TouchableOpacity>
-          <Modal
-            visible={attachmentMenuVisible}
-            transparent
-            animationType="fade"
-            onRequestClose={() => setAttachmentMenuVisible(false)}
-          >
-            <TouchableOpacity
-              style={styles.overlay}
-              activeOpacity={1}
-              onPressOut={() => setAttachmentMenuVisible(false)}
-            >
-              <View style={styles.menuContainer}>
-                <TouchableOpacity style={styles.menuItem} onPress={handleCamera}>
-                  <Ionicons name="camera" size={22} color={colors.red} />
-                  <Text style={styles.menuText}>Camera</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.menuItem} onPress={handlePhotos}>
-                  <Ionicons name="image" size={22} color={colors.red} />
-                  <Text style={styles.menuText}>Photos & Images</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.menuItem} onPress={handleVideo}>
-                  <Ionicons name="videocam" size={22} color={colors.red} />
-                  <Text style={styles.menuText}>Video</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.menuItem} onPress={handleDocument}>
-                  <MaterialIcons name="insert-drive-file" size={22} color={colors.red} />
-                  <Text style={styles.menuText}>Document</Text>
-                </TouchableOpacity>
-              </View>
-            </TouchableOpacity>
-          </Modal>
-
-          <TextInput
-            style={styles.textbox}
-            value={messageText}
-            onChangeText={setMessageText}
-            onSubmitEditing={() => {
-              if (!isSending && chatId && chatUsers.length > 0) {
-                sendMessage();
-              }
-            }}
-          />
-
-          {messageText === "" ? (
-            <TouchableOpacity style={styles.mediaButton} onPress={takePhoto}>
-              <Feather name="camera" size={24} color={colors.red} />
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={{ ...styles.mediaButton, ...styles.sendButton }}
-              onPress={sendMessage}
-            >
-              <Feather name="send" size={20} color="white" />
-            </TouchableOpacity>
-          )}
-
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <TouchableOpacity
-              style={styles.mediaButton}
-              onPress={handleVoiceRecording}
-            >
-              <FontAwesome
-                name={isRecording ? "stop" : "microphone"}
-                size={24}
-                color={colors.red}
-              />
-            </TouchableOpacity>
-            {isRecording && (
-              <Text style={{ marginLeft: 6, color: colors.red }}>
-                {recordingDuration}s
+          {isRecording ? (
+            // --- RECORDING UI: Replaces input area when recording ---
+            <View style={styles.recordingControls}>
+              <TouchableOpacity onPress={handleCancelRecording} style={{ marginRight: 12 }}>
+                <Ionicons name="close-circle" size={28} color={colors.red} />
+              </TouchableOpacity>
+              <Text style={{ flex: 1, textAlign: "center", fontWeight: "bold", color: "#333" }}>
+                Recording... {recordingDuration}s
               </Text>
-            )}
-          </View>
-
-          <AwesomeAlert
-            show={tempImageUri !== ""}
-            closeOnTouchOutside={true}
-            closeOnHardwareBackPress={false}
-            showConfirmButton={false}
-            showCancelButton={false}
-            onDismiss={() => setTempImageUri("")}
-            // FULLSCREEN STYLES:
-            contentContainerStyle={{
-              width: "100%",
-              height: "100%",
-              backgroundColor: "transparent",
-              borderRadius: 0,
-              padding: 0,
-              margin: 0,
-              flex: 1,
-              justifyContent: "center",
-              alignItems: "center",
-            }}
-            overlayStyle={{
-              backgroundColor: "#212121",
-              flex: 1,
-            }}
-            customView={
-              <View
-                style={{
-                  flex: 1,
-                  width: "100%",
-                  height: "100%",
-                  backgroundColor: "#212121",
+              <TouchableOpacity onPress={handleVoiceRecording} style={{ marginLeft: 12 }}>
+                <Ionicons name="send" size={28} color={colors.red} />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            // --- NORMAL INPUT UI ---
+            <>
+              <TouchableOpacity onPress={() => setAttachmentMenuVisible(true)}>
+                <Ionicons name="add" size={28} color={colors.red} />
+              </TouchableOpacity>
+              <TextInput
+                style={styles.textbox}
+                value={messageText}
+                onChangeText={setMessageText}
+                onSubmitEditing={() => {
+                  if (!isSending && chatId && chatUsers.length > 0) {
+                    sendMessage();
+                  }
                 }}
+              />
+              {messageText === "" ? (
+                <TouchableOpacity style={styles.mediaButton} onPress={takePhoto}>
+                  <Feather name="camera" size={24} color={colors.red} />
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={{ ...styles.mediaButton, ...styles.sendButton }}
+                  onPress={sendMessage}
+                >
+                  <Feather name="send" size={20} color="white" />
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={styles.mediaButton}
+                onPress={handleVoiceRecording}
+                disabled={isRecording}
               >
-                {/* Top Bar: Cross on Left, Buttons on Right */}
-                <View
-                  style={{
-                    position: "relative",
-                    top: 0,
-                    left: 0,
-                    width: "100%",
-                    flexDirection: "row",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    paddingTop: 10, // adjust for notch/status bar as needed
-                    paddingRight: 0,
-                    backgroundColor: "#212121",
-                    zIndex: 10,
-                  }}
-                >
-                  {/* Close/Cross Button */}
-                  <TouchableOpacity
-                    onPress={() => setTempImageUri("")}
-                    style={{
-                      padding: 10,
-                      marginRight: 0,
-                    }}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  >
-                    {/* Use Ionicons/MaterialIcons for icon or emoji ✕ */}
-                    <Text style={{ color: "#fff", fontSize: 30 }}>✕</Text>
-                  </TouchableOpacity>
-
-                  {/* Spacer to push buttons to right */}
-                  <View style={{ flex: 1 }} />
-
-                  {/* Send Buttons Row */}
-                  <View style={{ flexDirection: "row", alignItems: "center" }}>
-                    <TouchableOpacity
-                      onPress={async () => {
-                        const uri = tempImageUri;
-                        setTempImageUri("");
-                        await uploadImage(uri);
-                      }}
-                      style={{
-                        marginHorizontal: 6,
-                        paddingVertical: 8,
-                        paddingHorizontal: 14,
-                        backgroundColor: "#333",
-                        borderRadius: 20,
-                        flexDirection: "row",
-                        alignItems: "center",
-                      }}
-                    >
-                      <Text style={{ color: "#fff", fontSize: 17, marginRight: 6 }}>📤</Text>
-                      <Text style={{ color: "#fff", fontWeight: "bold" }}>Send</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      onPress={async () => {
-                        const uri = tempImageUri;
-                        setTempImageUri("");
-
-                        const ocrText = await performOCR(uri);
-                        let translatedText = null;
-
-                        if (ocrText) {
-                          const recipientId = chatUsers.find(
-                            (uid) => uid !== userData.userId
-                          );
-                          const db = getDatabase();
-                          const recipientSnap = await get(
-                            ref(db, `users/${recipientId}`)
-                          );
-                          const recipientLang = recipientSnap.val()?.preferredLanguage;
-
-                          if (
-                            recipientLang &&
-                            recipientLang !== "no_translation"
-                          ) {
-                            translatedText = await translateText(
-                              ocrText,
-                              recipientLang
-                            );
-                          }
-                        }
-
-                        await uploadImage(uri, translatedText, ocrText);
-                      }}
-                      style={{
-                        marginLeft: 6,
-                        paddingVertical: 8,
-                        paddingHorizontal: 14,
-                        backgroundColor: "#1976d2",
-                        borderRadius: 20,
-                        flexDirection: "row",
-                        alignItems: "center",
-                      }}
-                    >
-                      <Text style={{ color: "#fff", fontSize: 17, marginRight: 6 }}>🌐</Text>
-                      <Text style={{ color: "#fff", fontWeight: "bold" }}>Translate & Send</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                {/* Fullscreen Image Preview */}
-                <View
-                  style={{
-                    position: "absolute",
-                    top: 50,
-                    right: 10,
-
-                    flex: 1,
-                    justifyContent: "center",
-                    alignItems: "center",
-                    width: "100%",
-                    height: "100%"
-                  }}
-                >
-                  {isLoading ? (
-                    <ActivityIndicator size="large" color={colors.primary} />
-                  ) : (
-                    tempImageUri !== "" && <ImagePreview imageUri={tempImageUri} />
-                  )}
-                </View>
-              </View>
-
-            }
-          />
+                <FontAwesome name="microphone" size={24} color={colors.red} />
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -1243,6 +1069,18 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 15,
     borderTopRightRadius: 15,
     elevation: 8,
+  },
+  recordingControls: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 0,
+    paddingHorizontal: 16,
+    backgroundColor: "#fff",
+    borderRadius: 30,
+    marginHorizontal: 10,
+    elevation: 2,
   },
   menuItem: {
     flexDirection: "row",
