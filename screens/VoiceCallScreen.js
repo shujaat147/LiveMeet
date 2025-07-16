@@ -307,47 +307,51 @@ const VoiceCallScreen = () => {
 
   return (
     <ImageBackground source={backgroundImage} style={styles.container}>
-      <Image
-        source={
-          userInfo.profilePicture
-            ? { uri: userInfo.profilePicture }
-            : defaultAvatar
-        }
-        style={styles.avatar}
-      />
-      <Text style={styles.name}>
-        {userInfo.firstName} {userInfo.lastName}
-      </Text>
-      <Text style={styles.status}>
-        {remoteUserJoined
-          ? formatTime(callTime)
-          : isCaller
-          ? "Calling..."
-          : "Ringing..."}
-      </Text>
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+        <Image
+          source={
+            userInfo.profilePicture
+              ? { uri: userInfo.profilePicture }
+              : defaultAvatar
+          }
+          style={styles.avatar}
+        />
+        <Text style={styles.name}>
+          {userInfo.firstName} {userInfo.lastName}
+        </Text>
+        <Text style={styles.status}>
+          {remoteUserJoined
+            ? formatTime(callTime)
+            : isCaller
+              ? "Calling..."
+              : "Ringing..."}
+        </Text>
+      </View>
 
-      <View style={styles.controls}>
-        <TouchableOpacity onPress={toggleMute}>
-          <Ionicons
-            name={isMuted ? "mic-off" : "mic"}
-            size={32}
-            color={colors.grey}
-            padding={12}
-          />
-        </TouchableOpacity>
+      <View style={styles.controlsWrapper}>
+        <View style={styles.controls}>
+          <TouchableOpacity onPress={toggleMute}>
+            <Ionicons
+              name={isMuted ? "mic-off" : "mic"}
+              size={32}
+              color={isMuted ? colors.grey: colors.textColor}
+              padding={12}
+            />
+          </TouchableOpacity>
 
-        <TouchableOpacity onPress={endCall} style={styles.endCallButton}>
-          <Ionicons name="call" size={32} color={colors.nearlyWhite} />
-        </TouchableOpacity>
+          <TouchableOpacity onPress={endCall} style={styles.endCallButton}>
+            <Ionicons name="call" size={32} color={colors.nearlyWhite} />
+          </TouchableOpacity>
 
-        <TouchableOpacity onPress={toggleSpeaker}>
-          <Ionicons
-            name={isSpeakerOn ? "volume-high" : "volume-mute"}
-            size={32}
-            color={colors.grey}
-            padding={12}
-          />
-        </TouchableOpacity>
+          <TouchableOpacity onPress={toggleSpeaker}>
+            <Ionicons
+              name={isSpeakerOn ? "volume-high" : "volume-mute"}
+              size={32}
+              color={isSpeakerOn ? colors.textColor : colors.grey}
+              padding={12}
+            />
+          </TouchableOpacity>
+        </View>
       </View>
     </ImageBackground>
   );
@@ -361,9 +365,9 @@ const styles = StyleSheet.create({
     resizeMode: "cover",
   },
   avatar: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 210,
+    height: 210,
+    borderRadius: 100,
     marginBottom: 20,
   },
   name: {
@@ -377,11 +381,17 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 40,
   },
+  controlsWrapper: {
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    paddingBottom: 50, // Adjust as you like for space from bottom
+  },
   controls: {
     flexDirection: "row",
     width: "70%",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
+    alignItems: "center",
   },
   endCallButton: {
     backgroundColor: "red",

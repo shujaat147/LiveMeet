@@ -133,14 +133,14 @@ const IncomingCallScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.red,
+    backgroundColor: colors.grey,
     alignItems: "center",
     justifyContent: "center",
   },
   avatar: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
+    width: 210,
+    height: 210,
+    borderRadius: 100,
     marginBottom: 20,
   },
   name: {
