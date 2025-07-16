@@ -163,10 +163,8 @@ const SettingsScreen = (props) => {
                     label="Email"
                     icon="mail"
                     iconPack={Feather}
-                    onInputChanged={inputChangedHandler}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    errorText={formState.inputValidities['email']}
+                    editable={false} // <-- Make the field uneditable!
+                    selectTextOnFocus={false} // <-- Optional: can't even select the text
                     initialValue={email}
                 />
 
