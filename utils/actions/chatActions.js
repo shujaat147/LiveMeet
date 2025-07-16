@@ -34,6 +34,9 @@ export const createChat = async (loggedInUserId, chatData) => {
 };
 
 export const sendTextMessage = async (chatId, senderData, messageText, replyTo, chatUsers) => {
+    if (!chatUsers || chatUsers.length < 2) {
+        throw new Error("Chat users not loaded!");
+    }
     await sendMessage(chatId, senderData, messageText, null, replyTo, null);
 
     const otherUsers = chatUsers.filter(uid => uid !== senderData.userId);

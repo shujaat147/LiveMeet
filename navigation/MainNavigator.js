@@ -164,9 +164,10 @@ const MainNavigator = ({ isNavigationReady }) => {
   const debounceTimer = useRef(null);
 
   useEffect(() => {
-    registerForPushNotificationsAsync().then((token) =>
-      setExpoPushToken(token)
-    );
+    registerForPushNotificationsAsync().then((token) => {
+      setExpoPushToken(token);
+      console.log("Expo Push Token registered:", token);
+    });
 
     notificationListener.current =
       Notifications.addNotificationReceivedListener((notification) => {

@@ -80,6 +80,7 @@ const Bubble = (props) => {
   } = props;
 
   const [decryptedText, setDecryptedText] = useState('');
+  const [replyDecrypted, setReplyDecrypted] = useState('');
 
   useEffect(() => {
     let mounted = true;
@@ -98,6 +99,26 @@ const Bubble = (props) => {
     runDecrypt();
     return () => { mounted = false; }
   }, [text, iv]);
+
+  useEffect(() => {
+    let mounted = true;
+    async function decryptReply() {
+      if (replyingTo && replyingTo.text && replyingTo.iv) {
+        try {
+          const result = await decryptMessage(replyingTo.text, replyingTo.iv);
+          if (mounted) setReplyDecrypted(result);
+        } catch {
+          if (mounted) setReplyDecrypted(replyingTo.text);
+        }
+      } else if (replyingTo && replyingTo.text) {
+        setReplyDecrypted(replyingTo.text);
+      } else {
+        setReplyDecrypted('');
+      }
+    }
+    decryptReply();
+    return () => { mounted = false; }
+  }, [replyingTo]);
 
   const getDocIcon = (type = "", fileName = "") => {
     const lower = (type + " " + fileName).toLowerCase();
@@ -284,7 +305,9 @@ const Bubble = (props) => {
   if (type === "info") {
     return (
       <View style={styles.infoMessageWrapper}>
-        <Text style={styles.infoMessageText}>{text}</Text>
+        <Text style={styles.infoMessageText}>
+          {decryptedText || "[Decrypting...]"}
+        </Text>
       </View>
     );
   }
@@ -303,7 +326,7 @@ const Bubble = (props) => {
           {replyingToUser && (
             <Bubble
               type="reply"
-              text={replyingTo.text}
+              text={replyDecrypted}
               name={`${replyingToUser.firstName} ${replyingToUser.lastName}`}
             />
           )}
@@ -493,7 +516,7 @@ const Bubble = (props) => {
               <MenuItem
                 text="Copy to clipboard"
                 icon="copy"
-                onSelect={() => copyToClipboard(text)}
+                onSelect={() => copyToClipboard(decryptedText || text || "")}
               />
               <MenuItem
                 text={`${isStarred ? "Unstar" : "Star"} message`}
@@ -504,7 +527,13 @@ const Bubble = (props) => {
               <MenuItem
                 text="Reply"
                 icon="arrow-left-circle"
-                onSelect={setReply}
+                onSelect={() =>
+                  setReply({
+                    text: decryptedText || text || "",
+                    sentBy: props.userId || props.sentBy,
+                    key: props.messageId,   // <-- Add this line!
+                  })
+                }
               />
               <MenuItem
                 text="Delete for me"

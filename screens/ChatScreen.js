@@ -82,6 +82,7 @@ const ChatScreen = (props) => {
   const userData = useSelector((state) => state.auth.userData);
   const storedChats = useSelector((state) => state.chats.chatsData);
   const scrollToMessageId = props.route?.params?.scrollToMessageId;
+  const [showEncryptionNotice, setShowEncryptionNotice] = useState(false);
 
   useEffect(() => {
     if (scrollToMessageId && flatList.current && translatedMessages?.length) {
@@ -189,8 +190,8 @@ const ChatScreen = (props) => {
           userId={userData.userId}
           chatId={chatId}
           date={item.sentAt || item.timestamp}
-          name={!chatData.isGroupChat || isOwnMessage ? undefined : name}
-          setReply={() => setReplyingTo(item)}
+          name={!chatData?.isGroupChat || isOwnMessage ? undefined : name}
+          setReply={(replyData) => setReplyingTo(replyData)}
           replyingTo={
             item.replyTo && translatedMessages.find(i => i.key === item.replyTo)
           }
@@ -240,21 +241,25 @@ const ChatScreen = (props) => {
   // Automatically find chatId if only newChatData is passed
   useEffect(() => {
     if (!chatId && fallbackChatData?.users?.length) {
-      const newUsersSet = new Set(fallbackChatData.users);
-      const existingChat = Object.entries(storedChats).find(([id, chat]) => {
-        return (
-          chat.users.length === fallbackChatData.users.length &&
-          chat.users.every((userId) => newUsersSet.has(userId))
-        );
-      });
+      // 1-to-1 chat check
+      if (fallbackChatData.users.length === 2) {
+        const newUsersSet = new Set(fallbackChatData.users);
+        const existingChat = Object.entries(storedChats).find(([id, chat]) => {
+          return (
+            chat.users.length === 2 &&
+            chat.users.every((userId) => newUsersSet.has(userId))
+          );
+        });
 
-      if (existingChat) {
-        console.log(
-          "Found existing chat from newChatData, setting chatId:",
-          existingChat[0]
-        );
-        setChatId(existingChat[0]);
+        if (existingChat) {
+          console.log(
+            "Found existing 1-to-1 chat from newChatData, setting chatId:",
+            existingChat[0]
+          );
+          setChatId(existingChat[0]);
+        }
       }
+      // For group chats, ALWAYS create new (do nothing here)
     }
   }, [chatId, fallbackChatData, storedChats]);
 
@@ -374,46 +379,31 @@ const ChatScreen = (props) => {
     setIsSending(true);
     try {
       let id = chatId;
-      let updatedChatUsers = chatUsers;
-      const db = getDatabase();
 
+      // If chatId doesn't exist, create chat first
       if (!id) {
         id = await createChat(userData.userId, props.route.params.newChatData);
         setChatId(id);
 
-        // 🆕 Skip Firebase .get() — directly use what you already know
-        const newChat = {
-          ...props.route.params.newChatData,
-          createdBy: userData.userId,
-          createdAt: new Date().toISOString(),
-          key: id,
-        };
-
-        dispatch({
-          type: "chats/setChatsData",
-          payload: {
-            chatsData: {
-              ...storedChats,
-              [id]: newChat,
-            },
-          },
-        });
-
-        updatedChatUsers = newChat.users || [];
-        setChatUsers(updatedChatUsers);
-
-        if (!updatedChatUsers || updatedChatUsers.length < 2) {
-          throw new Error("Group members not loaded yet.");
-        }
+        // Wait for Redux to update (give it 200ms)
+        await new Promise((res) => setTimeout(res, 200));
       }
 
-      // ✅ Use updatedChatUsers + id directly
+      // After waiting, ALWAYS get fresh users from Redux (not local state!)
+      const latestChatData = storedChats[id] || props.route.params?.newChatData;
+      const usersToUse = latestChatData?.users;
+
+      // Double-check users are loaded
+      if (!usersToUse || usersToUse.length < 2) {
+        throw new Error("Chat users not loaded yet. Please try again.");
+      }
+
       await sendTextMessage(
         id,
         userData,
         messageText,
         replyingTo?.key,
-        updatedChatUsers
+        usersToUse
       );
       setMessageText("");
       setReplyingTo(null);
@@ -428,11 +418,10 @@ const ChatScreen = (props) => {
     messageText,
     chatId,
     isSending,
-    chatUsers,
-    storedChats,
-    storedUsers,
+    storedChats,       // << This is the key change
     userData,
     replyingTo,
+    props.route.params?.newChatData
   ]);
 
   const handleVoiceRecording = async () => {
@@ -590,6 +579,15 @@ const ChatScreen = (props) => {
   };
 
   useEffect(() => {
+    // Show encryption bar only after first message is sent
+    if (chatId && translatedMessages && translatedMessages.length > 0) {
+      setShowEncryptionNotice(true);
+    } else {
+      setShowEncryptionNotice(false);
+    }
+  }, [chatId, translatedMessages]);
+
+  useEffect(() => {
     if (!chatData || !chatUsers?.length) return;
 
     const otherUserId = chatUsers.find((uid) => uid !== userData.userId);
@@ -635,46 +633,47 @@ const ChatScreen = (props) => {
 
     return (
       <HeaderButtons HeaderButtonComponent={CustomHeaderButton}>
-        <Item
-          title="Voice Call"
-          iconName="call-outline"
-          onPress={async () => {
-            console.log("📞 Voice Call button pressed");
+        {!chatData?.isGroupChat && (
+          <Item
+            title="Voice Call"
+            iconName="call-outline"
+            onPress={async () => {
+              console.log("📞 Voice Call button pressed");
 
-            if (!chatId) {
-              console.warn("[ChatScreen] Cannot call — chatId missing.");
-              return;
-            }
+              if (!chatId) {
+                console.warn("[ChatScreen] Cannot call — chatId missing.");
+                return;
+              }
 
-            if (!otherUserId || !otherUserData) {
-              console.warn(
-                "[ChatScreen] Cannot initiate call — missing user data."
-              );
-              return;
-            }
+              if (!otherUserId || !otherUserData) {
+                console.warn(
+                  "[ChatScreen] Cannot initiate call — missing user data."
+                );
+                return;
+              }
 
-            console.log("initiateCall running");
+              console.log("initiateCall running");
 
-            try {
-              await initiateCall({
-                chatId,
-                callerId: userData.userId,
-                receiverId: otherUserId,
-              });
+              try {
+                await initiateCall({
+                  chatId,
+                  callerId: userData.userId,
+                  receiverId: otherUserId,
+                });
 
-              console.log("Navigating to VoiceCall screen...");
-              props.navigation.navigate("VoiceCall", {
-                chatId,
-                callerData: userData,
-                receiverData: otherUserData,
-                isCaller: true,
-              });
-            } catch (error) {
-              console.error("❌ initiateCall failed:", error);
-            }
-          }}
-        />
-
+                console.log("Navigating to VoiceCall screen...");
+                props.navigation.navigate("VoiceCall", {
+                  chatId,
+                  callerData: userData,
+                  receiverData: otherUserData,
+                  isCaller: true,
+                });
+              } catch (error) {
+                console.error("❌ initiateCall failed:", error);
+              }
+            }}
+          />)
+        }
         <Item
           title="Chat settings"
           iconName="settings-outline"
@@ -905,6 +904,23 @@ const ChatScreen = (props) => {
           style={styles.backgroundImage}
         >
           <PageContainer style={{ backgroundColor: "transparent" }}>
+            {chatId && translatedMessages?.length > 0 && showEncryptionNotice && (
+              <View style={{
+                backgroundColor: colors.beige, // or "#eee1c9" if you want fixed color
+                alignItems: "center",
+                borderRadius: 7,
+                marginTop: 10,
+                marginHorizontal: 10,
+                padding: 7,
+                flexDirection: "row",
+              }}>
+                <Ionicons name="lock-closed-outline" size={17} color="#65644A" style={{ marginRight: 6 }} />
+                <Text style={{ color: "#65644A", fontSize: 12, flex: 1 }}>
+                  Messages are end-to-end encrypted. Only people in this chat can read, or share them.
+                </Text>
+              </View>
+            )}
+
             {!chatId && (
               <Bubble text="This is a new chat. Say hi!" type="system" />
             )}
@@ -918,10 +934,10 @@ const ChatScreen = (props) => {
                 renderItem={renderItem}
                 flatListRef={flatList}
                 onContentSizeChange={() =>
-                  flatList.current.scrollToEnd({ animated: false })
+                  flatList.current.scrollToEnd({ animated: true })
                 }
                 onLayout={() =>
-                  flatList.current.scrollToEnd({ animated: false })
+                  flatList.current.scrollToEnd({ animated: true })
                 }
               />
             )}
@@ -929,7 +945,7 @@ const ChatScreen = (props) => {
 
           {replyingTo && (
             <ReplyTo
-              text={replyingTo.text}
+              text={replyingTo.text || "[Decrypting...]"}
               user={storedUsers[replyingTo.sentBy]}
               onCancel={() => setReplyingTo(null)}
             />
@@ -1300,6 +1316,9 @@ const styles = StyleSheet.create({
 });
 
 export default ChatScreen;
+
+
+
 
 
 
