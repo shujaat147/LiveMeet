@@ -301,3 +301,9 @@ async function encryptMessage(plainText) {
 
     return { cipherBase64, ivBase64 };
 }
+
+export const deleteMessageForEveryone = async (chatId, messageId) => {
+    const app = getFirebaseApp();
+    const db = getDatabase(app);
+    await remove(ref(db, `messages/${chatId}/${messageId}`));
+};

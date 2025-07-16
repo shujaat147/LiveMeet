@@ -26,7 +26,7 @@ import {
 } from "@expo/vector-icons";
 import { starMessage } from "../utils/actions/chatActions";
 import { useDispatch, useSelector } from "react-redux";
-import { hideMessage } from "../store/messagesSlice";
+import { deleteMessageForEveryone } from "../utils/actions/chatActions";
 import { Audio, Video } from "expo-av";
 import * as Linking from "expo-linking";
 import { decryptMessage } from "../utils/encryptionHelper";
@@ -225,10 +225,6 @@ const Bubble = (props) => {
     }
   };
 
-  const handleDeleteForMe = () => {
-    dispatch(hideMessage({ chatId, messageId }));
-  };
-
   const bubbleStyle = { ...styles.container };
   const textStyle = { ...styles.text };
   const wrapperStyle = { ...styles.wrapperStyle };
@@ -301,6 +297,13 @@ const Bubble = (props) => {
 
   const isStarred = isUserMessage && starredMessages[messageId] !== undefined;
   const replyingToUser = replyingTo && storedUsers[replyingTo.sentBy];
+  const handleDelete = async () => {
+    try {
+      await deleteMessageForEveryone(chatId, messageId);
+    } catch (e) {
+      console.log("Error deleting message for everyone:", e);
+    }
+  };
 
   if (type === "info") {
     return (
@@ -535,11 +538,13 @@ const Bubble = (props) => {
                   })
                 }
               />
-              <MenuItem
-                text="Delete for me"
-                icon="trash"
-                onSelect={handleDeleteForMe}
-              />
+              {userId === props.sentBy && (
+                <MenuItem
+                  text="Delete"
+                  icon="trash"
+                  onSelect={handleDelete}
+                />
+              )}
             </MenuOptions>
           </Menu>
         </View>

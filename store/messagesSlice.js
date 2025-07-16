@@ -26,17 +26,6 @@ const messagesSlice = createSlice({
             const { starredMessages } = action.payload;
             state.starredMessages = { ...starredMessages };
         },
-
-        // ✅ FIXED: Local-only delete from object
-        hideMessage: (state, action) => {
-            const { chatId, messageId } = action.payload;
-            const currentMessages = state.messagesData[chatId];
-
-            if (!currentMessages) return;
-
-            // Remove the message key from the object
-            delete currentMessages[messageId];
-        }
     }
 });
 
@@ -45,7 +34,6 @@ export const {
     addStarredMessage,
     removeStarredMessage,
     setStarredMessages,
-    hideMessage,
 } = messagesSlice.actions;
 
 export default messagesSlice.reducer;
