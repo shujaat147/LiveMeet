@@ -71,7 +71,6 @@ function getDateSeparatorString(dateString) {
   return date.toLocaleDateString(); // Local format (you can change style)
 }
 
-
 const ChatScreen = (props) => {
   console.log("Current user:", getAuth().currentUser?.email || null);
   const [messageText, setMessageText] = useState("");
@@ -607,6 +606,16 @@ const ChatScreen = (props) => {
     }
   }, [chatData, chatUsers, storedUsers]);
 
+  useEffect(() => {
+    // Scroll to bottom again after a short delay (for images/media)
+    if (chatId && translatedMessages?.length > 0) {
+      setTimeout(() => {
+        scrollToBottom(true);
+      }, 400); // increase if you have big media or slow devices
+    }
+  }, [chatId, translatedMessages.length]);
+
+
   const handleImagePress = (imageUrl) => {
     props.navigation.navigate("FullScreenImage", { imageUrl });
   };
@@ -892,6 +901,17 @@ const ChatScreen = (props) => {
     return result;
   }, [translatedMessages]);
 
+ function scrollToBottom() {
+  if (!flatList.current) return;
+  // Use setTimeout to ensure all rendering is done (e.g. images)
+  setTimeout(() => {
+    try {
+      flatList.current.scrollToEnd({ animated: false });
+    } catch (e) {}
+  }, 150);
+}
+
+
   return (
     <SafeAreaView edges={["right", "left", "bottom"]} style={styles.container}>
       <KeyboardAvoidingView
@@ -933,12 +953,8 @@ const ChatScreen = (props) => {
                 messages={chatMessagesWithDates}
                 renderItem={renderItem}
                 flatListRef={flatList}
-                onContentSizeChange={() =>
-                  flatList.current.scrollToEnd({ animated: true })
-                }
-                onLayout={() =>
-                  flatList.current.scrollToEnd({ animated: true })
-                }
+                onContentSizeChange={scrollToBottom}
+                onLayout={scrollToBottom}
               />
             )}
           </PageContainer>
@@ -1316,11 +1332,3 @@ const styles = StyleSheet.create({
 });
 
 export default ChatScreen;
-
-
-
-
-
-
-
-
