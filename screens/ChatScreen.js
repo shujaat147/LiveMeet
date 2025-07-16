@@ -51,6 +51,7 @@ import { getAuth } from "firebase/auth";
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import ChatMessages from "../components/ChatMessages";
 import { decryptMessage } from "../utils/encryptionHelper";
+import { } from "../utils/actions/chatActions";
 
 const MAX_PREVIEW_WIDTH = 400;
 const MAX_PREVIEW_HEIGHT = 700;
@@ -155,7 +156,7 @@ const ChatScreen = (props) => {
   }, [chatId, storedChats, props.route?.params?.newChatData]);
 
   const [chatUsers, setChatUsers] = useState([]);
-
+  
   const renderItem = useCallback(
     ({ item }) => {
       if (item.type === "date-separator") {
@@ -205,10 +206,11 @@ const ChatScreen = (props) => {
           fileSize={item.fileSize}
           fileType={item.fileType}
           iv={item.iv}
+          sentBy={item.sentBy}
         />
       );
     },
-    [userData.userId, chatId, chatData.isGroupChat, storedUsers, translatedMessages, handleImagePress]
+    [userData.userId, chatId, chatData?.isGroupChat, storedUsers, translatedMessages, handleImagePress]
   );
 
   // console.log("[ChatScreen] route.params:", props.route?.params);
@@ -620,14 +622,6 @@ const ChatScreen = (props) => {
     props.navigation.navigate("FullScreenImage", { imageUrl });
   };
 
-  if (!chatData || !chatData.users || chatData.users.length === 0) {
-    return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
-  }
-
   const renderHeaderRight = () => {
     if (!Array.isArray(chatUsers) || chatUsers.length < 2) {
       console.warn(
@@ -901,15 +895,15 @@ const ChatScreen = (props) => {
     return result;
   }, [translatedMessages]);
 
- function scrollToBottom() {
-  if (!flatList.current) return;
-  // Use setTimeout to ensure all rendering is done (e.g. images)
-  setTimeout(() => {
-    try {
-      flatList.current.scrollToEnd({ animated: false });
-    } catch (e) {}
-  }, 150);
-}
+  function scrollToBottom() {
+    if (!flatList.current) return;
+    // Use setTimeout to ensure all rendering is done (e.g. images)
+    setTimeout(() => {
+      try {
+        flatList.current.scrollToEnd({ animated: false });
+      } catch (e) { }
+    }, 150);
+  }
 
 
   return (

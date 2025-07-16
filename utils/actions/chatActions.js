@@ -307,3 +307,18 @@ export const deleteMessageForEveryone = async (chatId, messageId) => {
     const db = getDatabase(app);
     await remove(ref(db, `messages/${chatId}/${messageId}`));
 };
+
+export const deleteGroup = async (chatId, userIds) => {
+    const app = getFirebaseApp();
+    const db = getDatabase(app);
+
+    // Remove the group chat from the database
+    await remove(ref(db, `chats/${chatId}`));
+    await remove(ref(db, `messages/${chatId}`));
+    
+    // Optionally, remove chat from each user’s chatList (if you store per-user)
+    for (const uid of userIds) {
+        await remove(ref(db, `userChats/${uid}/${chatId}`));
+    }
+    // You can also send a push notification if needed.
+};

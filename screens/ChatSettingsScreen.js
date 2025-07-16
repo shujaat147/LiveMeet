@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useReducer, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import DataItem from '../components/DataItem';
 import Input from '../components/Input';
 import PageContainer from '../components/PageContainer';
@@ -8,9 +8,10 @@ import PageTitle from '../components/PageTitle';
 import ProfileImage from '../components/ProfileImage';
 import SubmitButton from '../components/SubmitButton';
 import colors from '../constants/colors';
-import { addUsersToChat, removeUserFromChat, updateChatData } from '../utils/actions/chatActions';
+import { addUsersToChat, removeUserFromChat, updateChatData, deleteGroup } from '../utils/actions/chatActions';
 import { validateInput } from '../utils/actions/formActions';
 import { reducer } from '../utils/reducers/formReducer';
+import { removeChatData } from "../store/chatSlice";
 
 const ChatSettingsScreen = props => {
 
@@ -22,6 +23,7 @@ const ChatSettingsScreen = props => {
     const userData = useSelector(state => state.auth.userData);
     const storedUsers = useSelector(state => state.users.storedUsers);
     const starredMessages = useSelector(state => state.messages.starredMessages[chatId] ?? {});
+    const dispatch = useDispatch();
 
     const initialState = {
         inputValues: { chatName: chatData.chatName },
@@ -98,6 +100,19 @@ const ChatSettingsScreen = props => {
     }, [props.navigation, isLoading])
 
     if (!chatData.users) return null;
+
+    const deleteGroupHandler = async () => {
+        try {
+            setIsLoading(true);
+            await deleteGroup(chatId, chatData.users);
+            dispatch(removeChatData(chatId)); // <-- REMOVE LOCALLY
+            props.navigation.popToTop();
+        } catch (error) {
+            console.log(error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     return <PageContainer>
         <PageTitle text="Chat Settings" />
@@ -180,6 +195,17 @@ const ChatSettingsScreen = props => {
             />
 
         </ScrollView>
+        {console.log("chatData:", chatData, "userData:", userData)}
+        {
+            chatData.isGroupChat && chatData.createdBy === userData.userId && (
+                <SubmitButton
+                    title="Delete Group"
+                    color={colors.red}
+                    onPress={() => deleteGroupHandler()}
+                    style={{ marginBottom: 10 }}
+                />
+            )
+        }
 
         {
             <SubmitButton
