@@ -1,7 +1,7 @@
 import ZegoExpressEngine, { ZegoScenario } from 'zego-express-engine-reactnative';
 
-const appID = 732545649;
-const appSign = '55baaeb85501194da632e36d05962f1ccaf621d59ccdb7bafff1739da4e02188';
+const appID = 472229515;
+const appSign = 'a0dfab6fbc7fe6aed34218a9c88690edac1ce26f45c301b4e3e69eb9d0db8205';
 
 let engineCreated = false; // 🧠 Track engine creation
 
