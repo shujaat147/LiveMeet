@@ -20,14 +20,19 @@ const Input = props => {
             {
                 props.icon && <props.iconPack
                     name={props.icon}
-                    size={props.iconSize || 15 }
+                    size={props.iconSize || 15}
                     style={styles.icon} />
             }
             <TextInput
-                { ...props }
+                {...props}
+                secureTextEntry={props.secureTextEntry}
                 style={styles.input}
                 onChangeText={onChangeText}
-                value={value}/>
+                value={value} />
+
+            {props.rightIcon && (
+                <View style={{ marginLeft: 10 }}>{props.rightIcon}</View>
+            )}
         </View>
 
         {

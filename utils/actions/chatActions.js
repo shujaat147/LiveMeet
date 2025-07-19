@@ -4,6 +4,7 @@ import { getUserPushTokens } from "./authActions";
 import { addUserChat, deleteUserChat, getUserChats } from "./userActions";
 import { detectLanguage, translateText } from "../translateHelper";
 import RNSimpleCrypto from 'react-native-simple-crypto';
+import {toBase64, fromBase64} from "../encryptionHelper"
 
 const SECRET_KEY = 'finalYearProjectLiveMeet'; //AES 16, 24, or 32 bytes
 
@@ -286,11 +287,14 @@ const sendPushNotificationForUsers = (chatUsers, title, body, chatId) => {
 }
 
 async function encryptMessage(plainText) {
-    // Convert key and plaintext to ArrayBuffers
+    // STEP 1: Always encode to base64 first
+    const base64Text = toBase64(plainText);
+
+    // STEP 2: Encrypt as usual
     const keyBuffer = await RNSimpleCrypto.utils.convertUtf8ToArrayBuffer(SECRET_KEY);
     const iv = await RNSimpleCrypto.utils.randomBytes(16); // 16 bytes IV
 
-    const textBuffer = await RNSimpleCrypto.utils.convertUtf8ToArrayBuffer(plainText);
+    const textBuffer = await RNSimpleCrypto.utils.convertUtf8ToArrayBuffer(base64Text);
 
     // Encrypt
     const cipherBuffer = await RNSimpleCrypto.AES.encrypt(textBuffer, keyBuffer, iv);

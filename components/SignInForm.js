@@ -34,6 +34,7 @@ const SignInForm = props => {
     const [formState, dispatchFormState] = useReducer(reducer, initialState);
     const [showForgot, setShowForgot] = useState(false);
     const [forgotEmail, setForgotEmail] = useState("");
+    const [showPassword, setShowPassword] = useState(false);
 
     const inputChangedHandler = useCallback((inputId, inputValue) => {
         const result = validateInput(inputId, inputValue);
@@ -111,10 +112,20 @@ const SignInForm = props => {
                 icon="lock"
                 iconPack={Feather}
                 autoCapitalize="none"
-                secureTextEntry
+                secureTextEntry={!showPassword}
                 onInputChanged={inputChangedHandler}
                 initialValue={formState.inputValues.password}
-                errorText={formState.inputValidities["password"]} />
+                errorText={formState.inputValidities["password"]}
+                rightIcon={
+                    <TouchableOpacity onPress={() => setShowPassword(prev => !prev)}>
+                        <Feather
+                            name={showPassword ? "eye-off" : "eye"}
+                            size={20}
+                            color={colors.red}
+                        />
+                    </TouchableOpacity>
+                }
+            />
 
             <TouchableOpacity onPress={() => setShowForgot(true)}>
                 <Text style={{ color: colors.primary, marginTop: 12, marginBottom: -8, alignSelf: "flex-end" }}>

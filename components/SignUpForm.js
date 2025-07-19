@@ -6,7 +6,7 @@ import { Feather, FontAwesome } from '@expo/vector-icons';
 import { validateInput } from '../utils/actions/formActions';
 import { reducer } from '../utils/reducers/formReducer';
 import { signUp } from '../utils/actions/authActions';
-import { ActivityIndicator, Alert, Text } from 'react-native';
+import { ActivityIndicator, Alert, Text, TouchableOpacity } from 'react-native';
 import colors from '../constants/colors';
 import { useDispatch } from 'react-redux';
 
@@ -34,6 +34,8 @@ const SignUpForm = props => {
     const [error, setError] = useState();
     const [isLoading, setIsLoading] = useState(false);
     const [formState, dispatchFormState] = useReducer(reducer, initialState);
+    const [showPassword, setShowPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
     const inputChangedHandler = useCallback((inputId, inputValue) => {
         const result = validateInput(inputId, inputValue);
@@ -112,10 +114,19 @@ const SignUpForm = props => {
                 label="Password"
                 icon="lock"
                 autoCapitalize="none"
-                secureTextEntry
+                secureTextEntry={!showPassword}
                 iconPack={Feather}
                 onInputChanged={inputChangedHandler}
                 errorText={formState.inputValidities["password"]}
+                rightIcon={
+                    <TouchableOpacity onPress={() => setShowPassword(prev => !prev)}>
+                        <Feather
+                            name={showPassword ? "eye-off" : "eye"}
+                            size={20}
+                            color={colors.red}
+                        />
+                    </TouchableOpacity>
+                }
             />
 
             <Input
@@ -123,16 +134,25 @@ const SignUpForm = props => {
                 label="Confirm Password"
                 icon="lock"
                 autoCapitalize="none"
-                secureTextEntry
+                secureTextEntry={!showConfirmPassword}
                 iconPack={Feather}
                 onInputChanged={inputChangedHandler}
                 errorText={formState.inputValidities["confirmPassword"]}
+                rightIcon={
+                    <TouchableOpacity onPress={() => setShowConfirmPassword(prev => !prev)}>
+                        <Feather
+                            name={showConfirmPassword ? "eye-off" : "eye"}
+                            size={20}
+                            color={colors.red}
+                        />
+                    </TouchableOpacity>
+                }
             />
 
             {
                 confirmPassword.length > 0 && !passwordsMatch && (
-                   <Text style={{ color: 'red', marginTop: 4, marginBottom: 12, marginLeft: 5, fontSize: 13 }}>
-                    Passwords do not match
+                    <Text style={{ color: 'red', marginTop: 4, marginBottom: 12, marginLeft: 5, fontSize: 13 }}>
+                        Passwords do not match
                     </Text>
 
                 )
