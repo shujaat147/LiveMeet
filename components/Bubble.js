@@ -88,7 +88,7 @@ const Bubble = (props) => {
       if (text && iv) {
         try {
           const result = await decryptMessage(text, iv);
-          console.log("Decrypted:", result); 
+          // console.log("Decrypted:", result); 
           if (mounted) setDecryptedText(result);
         } catch (e) {
           if (mounted) setDecryptedText(text); // fallback to raw text

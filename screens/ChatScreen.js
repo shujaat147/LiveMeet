@@ -52,6 +52,7 @@ import * as VideoThumbnails from 'expo-video-thumbnails';
 import ChatMessages from "../components/ChatMessages";
 import { decryptMessage } from "../utils/encryptionHelper";
 import { } from "../utils/actions/chatActions";
+import { selectChatMessages } from "../store/selectors/chatSelectors";
 
 const MAX_PREVIEW_WIDTH = 400;
 const MAX_PREVIEW_HEIGHT = 700;
@@ -136,16 +137,7 @@ const ChatScreen = (props) => {
   const fallbackChatData = props.route?.params?.newChatData;
   const translationCache = useRef({});
 
-  const chatMessagesRaw = useSelector(
-    useCallback((state) => state.messages.messagesData[chatId] || {}, [chatId])
-  );
-
-  const chatMessages = useMemo(() => {
-    return Object.keys(chatMessagesRaw).map((key) => ({
-      key,
-      ...chatMessagesRaw[key],
-    }));
-  }, [chatMessagesRaw]);
+  const chatMessages = useSelector(state => selectChatMessages(state, chatId));
 
   const chatData = useMemo(() => {
     return (
@@ -155,8 +147,14 @@ const ChatScreen = (props) => {
     );
   }, [chatId, storedChats, props.route?.params?.newChatData]);
 
-  const [chatUsers, setChatUsers] = useState([]);
-  
+  const chatUsers = useMemo(() => {
+    // Priority: route param users > chatData.users > []
+    const routeUsers = props.route?.params?.newChatData?.users;
+    if (Array.isArray(routeUsers) && routeUsers.length > 0) return routeUsers;
+    if (Array.isArray(chatData?.users) && chatData.users.length > 0) return chatData.users;
+    return [];
+  }, [props.route?.params?.newChatData?.users, chatData?.users]);
+
   const renderItem = useCallback(
     ({ item }) => {
       if (item.type === "date-separator") {
@@ -218,51 +216,30 @@ const ChatScreen = (props) => {
   // console.log("[ChatScreen] newChatData:", props.route?.params?.newChatData);
   // console.log("[ChatScreen] chatUsers state:", chatUsers);
 
-  useEffect(() => {
-    const routeUsers = props.route?.params?.newChatData?.users;
-    const fallbackUsers = chatData?.users;
-
-    const resolvedUsers = routeUsers || fallbackUsers;
-
-    if (Array.isArray(resolvedUsers) && resolvedUsers.length > 0) {
-      console.log(
-        "[ChatScreen] Updating chatUsers from route/chatData:",
-        resolvedUsers
-      );
-      setChatUsers(resolvedUsers);
-    } else {
-      console.warn("[ChatScreen] Failed to resolve chat users", {
-        routeUsers,
-        fallbackUsers,
-      });
-    }
-  }, [props.route, chatData]);
-
 
   // Automatically find chatId if only newChatData is passed
-  useEffect(() => {
-    if (!chatId && fallbackChatData?.users?.length) {
-      // 1-to-1 chat check
-      if (fallbackChatData.users.length === 2) {
-        const newUsersSet = new Set(fallbackChatData.users);
-        const existingChat = Object.entries(storedChats).find(([id, chat]) => {
-          return (
-            chat.users.length === 2 &&
-            chat.users.every((userId) => newUsersSet.has(userId))
-          );
-        });
+  const ranRef = useRef(false);
 
-        if (existingChat) {
-          console.log(
-            "Found existing 1-to-1 chat from newChatData, setting chatId:",
-            existingChat[0]
-          );
-          setChatId(existingChat[0]);
-        }
+  useEffect(() => {
+  if (!ranRef.current && !chatId && fallbackChatData?.users?.length) {
+    if (fallbackChatData.users.length === 2) {
+      const newUsersSet = new Set(fallbackChatData.users);
+      const existingChat = Object.entries(storedChats).find(([id, chat]) => {
+        return (
+          chat.users.length === 2 &&
+          chat.users.every((userId) => newUsersSet.has(userId))
+        );
+      });
+      if (existingChat) {
+        setChatId(existingChat[0]);
+        ranRef.current = true;
+      } else {
+        // Only run once per mount!
+        ranRef.current = true;
       }
-      // For group chats, ALWAYS create new (do nothing here)
     }
-  }, [chatId, fallbackChatData, storedChats]);
+  }
+}, [JSON.stringify(fallbackChatData?.users), JSON.stringify(storedChats)]);
 
   const getChatTitleFromName = () => {
     if (!Array.isArray(chatUsers)) return "Chat";
@@ -343,36 +320,6 @@ const ChatScreen = (props) => {
 
     translateMessages();
   }, [chatMessages, userData?.preferredLanguage]);
-
-  useEffect(() => {
-    if (!chatData) return;
-
-    props.navigation.setOptions({
-      headerTitle: chatData.chatName ?? getChatTitleFromName(),
-      headerRight: renderHeaderRight,
-    });
-
-    if (!chatUsers || chatUsers.length === 0) {
-      const usersFromRoute = props.route.params?.newChatData?.users;
-      const fallbackUsers = chatData?.users;
-
-      const resolvedUsers = usersFromRoute || fallbackUsers || [];
-
-      if (resolvedUsers.length) {
-        console.log("[ChatScreen] Resolved initial chat users:", resolvedUsers);
-        setChatUsers(resolvedUsers);
-      } else {
-        console.warn("[ChatScreen] Unable to resolve users for chat");
-      }
-    }
-    if (!chatData.users || !Array.isArray(chatData.users)) {
-      console.warn("[ChatScreen] chatData.users is invalid:", chatData.users);
-    }
-    console.log(
-      "[ChatScreen] Setting chat users from chatData:",
-      chatData.users
-    );
-  }, [chatData]);
 
   const sendMessage = useCallback(async () => {
     if (isSending || messageText.trim() === "") return;
@@ -578,6 +525,10 @@ const ChatScreen = (props) => {
       console.error("sendImageWithTranslation failed:", err);
     }
   };
+
+  if ((!chatId && !props.route?.params?.newChatData) || !userData) {
+    return <ActivityIndicator />;
+  }
 
   useEffect(() => {
     // Show encryption bar only after first message is sent

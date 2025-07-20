@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useReducer, useState } from 'react';
+import React, { useCallback, useEffect, useReducer, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import DataItem from '../components/DataItem';
@@ -12,6 +12,7 @@ import { addUsersToChat, removeUserFromChat, updateChatData, deleteGroup } from 
 import { validateInput } from '../utils/actions/formActions';
 import { reducer } from '../utils/reducers/formReducer';
 import { removeChatData } from "../store/chatSlice";
+import { selectChatById, selectStoredUsers, selectStarredMessagesByChatId } from "../store/selectors/chatSelectors";
 
 const ChatSettingsScreen = props => {
 
@@ -19,11 +20,16 @@ const ChatSettingsScreen = props => {
     const [showSuccessMessage, setShowSuccessMessage] = useState(false);
 
     const chatId = props.route.params.chatId;
-    const chatData = useSelector(state => state.chats.chatsData[chatId] || {});
+    const chatData = useSelector(state => selectChatById(state, chatId)) || {};
     const userData = useSelector(state => state.auth.userData);
-    const storedUsers = useSelector(state => state.users.storedUsers);
-    const starredMessages = useSelector(state => state.messages.starredMessages[chatId] ?? {});
+    const storedUsers = useSelector(selectStoredUsers);
+    const starredMessages = useSelector(state => selectStarredMessagesByChatId(state, chatId));
     const dispatch = useDispatch();
+
+    const usersArray = useMemo(
+        () => Array.isArray(chatData.users) ? chatData.users : [],
+        [chatData.users]
+    );
 
     const initialState = {
         inputValues: { chatName: chatData.chatName },
@@ -114,6 +120,20 @@ const ChatSettingsScreen = props => {
         }
     };
 
+    const displayedUsers = useMemo(() => {
+        return usersArray.slice(0, 4).map(uid => {
+            const currentUser = storedUsers[uid];
+            return {
+                key: uid,
+                image: currentUser?.profilePicture,
+                title: `${currentUser?.firstName || ""} ${currentUser?.lastName || ""}`,
+                subTitle: currentUser?.about,
+                type: uid !== userData.userId && "link",
+                onPress: () => uid !== userData.userId && props.navigation.navigate("Contact", { uid, chatId }),
+            };
+        });
+    }, [usersArray, storedUsers, userData.userId, props.navigation, chatId]);
+
     return <PageContainer>
         <PageTitle text="Chat Settings" />
 
@@ -147,19 +167,16 @@ const ChatSettingsScreen = props => {
                     onPress={() => props.navigation.navigate("NewChat", { isGroupChat: true, existingUsers: chatData.users, chatId })}
                 />
 
-                {
-                    chatData.users.slice(0, 4).map(uid => {
-                        const currentUser = storedUsers[uid];
-                        return <DataItem
-                            key={uid}
-                            image={currentUser.profilePicture}
-                            title={`${currentUser.firstName} ${currentUser.lastName}`}
-                            subTitle={currentUser.about}
-                            type={uid !== userData.userId && "link"}
-                            onPress={() => uid !== userData.userId && props.navigation.navigate("Contact", { uid, chatId })}
-                        />
-                    })
-                }
+                {displayedUsers.map(item =>
+                    <DataItem
+                        key={item.key}
+                        image={item.image}
+                        title={item.title}
+                        subTitle={item.subTitle}
+                        type={item.type}
+                        onPress={item.onPress}
+                    />
+                )}
 
                 {
                     chatData.users.length > 4 &&
