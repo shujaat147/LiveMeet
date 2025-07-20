@@ -221,25 +221,25 @@ const ChatScreen = (props) => {
   const ranRef = useRef(false);
 
   useEffect(() => {
-  if (!ranRef.current && !chatId && fallbackChatData?.users?.length) {
-    if (fallbackChatData.users.length === 2) {
-      const newUsersSet = new Set(fallbackChatData.users);
-      const existingChat = Object.entries(storedChats).find(([id, chat]) => {
-        return (
-          chat.users.length === 2 &&
-          chat.users.every((userId) => newUsersSet.has(userId))
-        );
-      });
-      if (existingChat) {
-        setChatId(existingChat[0]);
-        ranRef.current = true;
-      } else {
-        // Only run once per mount!
-        ranRef.current = true;
+    if (!ranRef.current && !chatId && fallbackChatData?.users?.length) {
+      if (fallbackChatData.users.length === 2) {
+        const newUsersSet = new Set(fallbackChatData.users);
+        const existingChat = Object.entries(storedChats).find(([id, chat]) => {
+          return (
+            chat.users.length === 2 &&
+            chat.users.every((userId) => newUsersSet.has(userId))
+          );
+        });
+        if (existingChat) {
+          setChatId(existingChat[0]);
+          ranRef.current = true;
+        } else {
+          // Only run once per mount!
+          ranRef.current = true;
+        }
       }
     }
-  }
-}, [JSON.stringify(fallbackChatData?.users), JSON.stringify(storedChats)]);
+  }, [JSON.stringify(fallbackChatData?.users), JSON.stringify(storedChats)]);
 
   const getChatTitleFromName = () => {
     if (!Array.isArray(chatUsers)) return "Chat";
@@ -551,9 +551,27 @@ const ChatScreen = (props) => {
       //console.log("[ChatScreen] storedUsers:", storedUsers);
 
       props.navigation.setOptions({
-        headerTitle:
-          chatData.chatName ??
-          `${otherUserData.firstName} ${otherUserData.lastName}`,
+        headerTitle: () => (
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <Image
+              source={otherUserData.profilePicture
+                ? { uri: otherUserData.profilePicture }
+                : require("../assets/images/userImage-1.png") // fallback image
+              }
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: 100,
+                marginRight: 5,
+                backgroundColor: "#ccc"
+              }}
+            />
+            <Text style={{ fontSize: 18, fontWeight: "regular" }}>
+              {chatData.chatName ??
+                `${otherUserData.firstName} ${otherUserData.lastName}`}
+            </Text>
+          </View>
+        ),
         headerRight: renderHeaderRight,
       });
     }
@@ -951,8 +969,9 @@ const ChatScreen = (props) => {
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity
-                  style={{ ...styles.mediaButton, ...styles.sendButton }}
+                  style={{ ...styles.mediaButton, ...styles.sendButton, opacity: isSending ? 0.5 : 1 }}
                   onPress={sendMessage}
+                  disabled={isSending}
                 >
                   <Feather name="send" size={20} color="white" />
                 </TouchableOpacity>
