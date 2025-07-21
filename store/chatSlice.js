@@ -14,9 +14,14 @@ const chatSlice = createSlice({
     removeChatData: (state, action) => {
       const chatId = action.payload;
       delete state.chatsData[chatId];
-    }
+    },
+    addChatData: (state, action) => {
+      // action.payload must have .key (chatId) and chat object fields
+      const chatId = action.payload.key;
+      state.chatsData[chatId] = { ...state.chatsData[chatId], ...action.payload };
+    },
   }
 });
 
-export const { setChatsData, removeChatData } = chatSlice.actions;
+export const { setChatsData, removeChatData, addChatData } = chatSlice.actions;
 export default chatSlice.reducer;

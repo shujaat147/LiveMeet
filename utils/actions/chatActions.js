@@ -7,6 +7,7 @@ import RNSimpleCrypto from 'react-native-simple-crypto';
 import {toBase64, fromBase64} from "../encryptionHelper"
 
 const SECRET_KEY = 'finalYearProjectLiveMeet'; //AES 16, 24, or 32 bytes
+const DEFAULT_GROUP_IMAGE_URL = "https://firebasestorage.googleapis.com/v0/b/livemeet-669d1.firebasestorage.app/o/profilePics%2FgroupImage-1.png?alt=media&token=e327d280-5abc-411e-9423-711d02f49436";
 
 export const createChat = async (loggedInUserId, chatData) => {
     const newChatData = {
@@ -15,7 +16,10 @@ export const createChat = async (loggedInUserId, chatData) => {
         createdBy: loggedInUserId,
         updatedBy: loggedInUserId,
         createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        groupImage: (chatData.isGroupChat && !chatData.groupImage)
+            ? DEFAULT_GROUP_IMAGE_URL
+            : chatData.groupImage || null,
     };
 
     const app = getFirebaseApp();

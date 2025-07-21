@@ -554,9 +554,15 @@ const ChatScreen = (props) => {
         headerTitle: () => (
           <View style={{ flexDirection: "row", alignItems: "center" }}>
             <Image
-              source={otherUserData.profilePicture
-                ? { uri: otherUserData.profilePicture }
-                : require("../assets/images/userImage-1.png") // fallback image
+              source={
+                chatData?.isGroupChat
+                  ? chatData.chatImage ? { uri: chatData.chatImage }
+                    : chatData.groupImage
+                      ? { uri: chatData.groupImage }
+                      : require("../assets/images/groupImage-1.png") // fallback for groups
+                  : otherUserData?.profilePicture
+                    ? { uri: otherUserData.profilePicture }
+                    : require("../assets/images/userImage-1.png") // fallback for 1-1
               }
               style={{
                 width: 38,

@@ -93,74 +93,87 @@ const DataListScreen = props => {
         return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
     }
 
-    return <PageContainer>
-        <FlatList
-            data={decryptedStarred}
-            keyExtractor={item => item.messageId || item}
-            renderItem={(itemData) => {
-                let key, onPress, image, title, subTitle, itemType;
+    return (
+        <PageContainer>
+            <FlatList
+                data={type === "users" ? props.route.params.data : decryptedStarred}
+                keyExtractor={item => {
+                    // For users, key by userId, fallback to item if string
+                    if (type === "users") {
+                        if (typeof item === "string") return item;
+                        return item.userId || item._id || String(Math.random());
+                    }
+                    // For messages
+                    return item.messageId || String(Math.random());
+                }}
+                renderItem={(itemData) => {
+                    if (type === "users") {
+                        // Support both uid string and user object
+                        const user = typeof itemData.item === "string"
+                            ? storedUsers[itemData.item]
+                            : itemData.item;
+                        if (!user) return null;
+                        const isLoggedInUser = user.userId === userData.userId;
 
-                if (type === "users") {
-                    const uid = itemData.item;
-                    const currentUser = storedUsers[uid];
+                        return (
+                            <DataItem
+                                key={user.userId}
+                                image={user.profilePicture}
+                                title={`${user.firstName || ""} ${user.lastName || ""}`}
+                                subTitle={user.about}
+                                type={isLoggedInUser ? undefined : "link"}
+                                onPress={isLoggedInUser ? undefined : () =>
+                                    props.navigation.navigate("Contact", { uid: user.userId, chatId })
+                                }
+                            />
+                        );
+                    }
+                    // Existing starred messages rendering
+                    else if (type === "messages") {
+                        const starData = itemData.item;
 
-                    if (!currentUser) return;
-
-                    const isLoggedInUser = uid === userData.userId;
-
-                    key = uid;
-                    image = currentUser.profilePicture;
-                    title = `${currentUser.firstName} ${currentUser.lastName}`;
-                    subTitle = currentUser.about;
-                    itemType = isLoggedInUser ? undefined : "link";
-                    onPress = isLoggedInUser ? undefined : () => props.navigation.navigate("Contact", { uid, chatId })
-                }
-                else if (type === "messages") {
-                    const starData = itemData.item;
-
-                    return (
-                        <DataItem
-                            key={starData.messageId}
-                            image={starData.image}
-                            onPress={() => {
-                                props.navigation.navigate("ChatScreen", {
-                                    chatId: starData.chatId,
-                                    scrollToMessageId: starData.messageId,
-                                });
-                            }}
-                            title={
-                                starData.sentBy === userData.userId
-                                    ? `${starData.name} (You)`
-                                    : starData.name
-                            }
-                            subTitle={starData.text}
-                            rightContent={
-                                <View style={{ alignItems: "flex-end" }}>
-                                    <Text style={{
-                                        color: "#888",
-                                        fontSize: 12,
-                                        marginBottom: 3,
-                                        fontFamily: "regular",
-                                        textAlign: "right"
-                                    }}>
-                                        {formatDate(starData.date)}
-                                    </Text>
-                                    <TouchableOpacity
-                                        onPress={() => handleRemoveStar(starData.chatId, starData.messageId)}
-                                        style={{ alignSelf: "flex-end", marginTop: 2 }}
-                                    >
-                                        <Feather name="trash-2" size={22} color={colors.red} />
-                                    </TouchableOpacity>
-                                </View>
-                            }
-                        />
-                    );
-                }
-
-            }}
-        />
-
-    </PageContainer>
-};
+                        return (
+                            <DataItem
+                                key={starData.messageId}
+                                image={starData.image}
+                                onPress={() => {
+                                    props.navigation.navigate("ChatScreen", {
+                                        chatId: starData.chatId,
+                                        scrollToMessageId: starData.messageId,
+                                    });
+                                }}
+                                title={
+                                    starData.sentBy === userData.userId
+                                        ? `${starData.name} (You)`
+                                        : starData.name
+                                }
+                                subTitle={starData.text}
+                                rightContent={
+                                    <View style={{ alignItems: "flex-end" }}>
+                                        <Text style={{
+                                            color: "#888",
+                                            fontSize: 12,
+                                            marginBottom: 3,
+                                            fontFamily: "regular",
+                                            textAlign: "right"
+                                        }}>
+                                            {formatDate(starData.date)}
+                                        </Text>
+                                        <TouchableOpacity
+                                            onPress={() => handleRemoveStar(starData.chatId, starData.messageId)}
+                                            style={{ alignSelf: "flex-end", marginTop: 2 }}
+                                        >
+                                            <Feather name="trash-2" size={22} color={colors.red} />
+                                        </TouchableOpacity>
+                                    </View>
+                                }
+                            />
+                        );
+                    }
+                }}
+            />
+        </PageContainer>
+    );
+}
 
 export default DataListScreen;

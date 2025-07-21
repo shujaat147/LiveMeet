@@ -105,8 +105,6 @@ const ChatSettingsScreen = props => {
         }
     }, [props.navigation, isLoading])
 
-    if (!chatData.users) return null;
-
     const deleteGroupHandler = async () => {
         try {
             setIsLoading(true);
@@ -143,7 +141,7 @@ const ChatSettingsScreen = props => {
                 size={80}
                 chatId={chatId}
                 userId={userData.userId}
-                uri={chatData.chatImage}
+                uri={chatData.chatImage ? chatData.chatImage : chatData.groupImage }
             />
 
             <Input
@@ -158,7 +156,7 @@ const ChatSettingsScreen = props => {
 
 
             <View style={styles.sectionContainer}>
-                <Text style={styles.heading}>{chatData.users.length} Participants</Text>
+                <Text style={styles.heading}>{chatData.users?.length} Participants</Text>
 
                 <DataItem
                     title="Add users"
@@ -179,20 +177,22 @@ const ChatSettingsScreen = props => {
                 )}
 
                 {
-                    chatData.users.length > 4 &&
+                    chatData.users?.length > 4 &&
                     <DataItem
                         type={"link"}
                         title="View all"
                         hideImage={true}
-                        onPress={() => props.navigation.navigate("DataList", { title: "Participants", data: chatData.users, type: "users", chatId })}
+                        onPress={() => {
+                            const participants = chatData.users
+                                .map(uid => storedUsers[uid])
+                                .filter(Boolean); // Remove any undefined users
+                            props.navigation.navigate("DataList", { title: "Participants", data: participants, type: "users", chatId });
+                        }}
                     />
                 }
             </View>
 
-
-
             {showSuccessMessage && <Text>Saved!</Text>}
-
             {
                 isLoading ?
                     <ActivityIndicator size={'small'} color={colors.primary} /> :

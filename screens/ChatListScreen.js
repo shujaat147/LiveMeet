@@ -113,7 +113,7 @@ const ChatListScreen = props => {
 
                     if (isGroupChat) {
                         title = chatData.chatName;
-                        image = chatData.chatImage
+                        image = chatData.chatImage ? chatData.chatImage : chatData.groupImage
                             // ? chatData.chatImage
                             // : require("../assets/images/groupImage-1.png");
                     } else {
